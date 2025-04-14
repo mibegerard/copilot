@@ -35,4 +35,7 @@ coverage/
 
 # Miscellaneous
 *.lock
-smart-copilot-frontend/.git
+
+# Assets
+assets/
+assets.csv
