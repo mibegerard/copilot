@@ -1,41 +1,2276 @@
-name:ID(Tag)
-DISBURSEMENT
-PRE_POSTING
-VALIDATION
-POST_POSTING
-TESTING
-UNIT_TEST
-_validate_phase
-_validate_status_code
-_validate_tirage
-_risk_premiun_settled
-_validate_postings_amount
-_posting_account_is_the_same_account
-_balance_has_available_amount_for_posting
-_control_posting_instructions
-_posting_has_correct_event_type
-_posting_has_mandatory_fields
-test_post_posting_code_should_send_a_note
-test_post_posting_code_shouldn_send_a_note
-test_post_posting_code_disbursement
-test_do_disbursement
-test_pre_posting_code
-test_validate_phase
-test_validate_status_code
-test_validate_tirage
-test_risk_premiun_settled
-test_validate_postings_amount
-test_control_posting_instructions_without_event_type
-test_control_posting_instructions_without_tirage_id
-test_posting_has_correct_event_type_incorrect_event_type
-test_posting_has_correct_event_type_none_event_type
-test_posting_has_correct_event_type_blank_event_type
-test_posting_has_correct_event_type_tirage_event_type
-test_posting_has_mandatory_fields
-test_posting_has_mandatory_fields_without_event_type
-test_posting_has_mandatory_fields_empty_event_type
-test_posting_has_mandatory_fields_none_event_type
-test_posting_has_mandatory_fields_pending
-test_posting_has_mandatory_fields_approved
-test_posting_account_is_the_same_account
-test_balance_has_available_amount_for_posting
+name:ID(Tag),content
+DISBURSEMENT,No content found
+PRE_POSTING,No content found
+VALIDATION,No content found
+POST_POSTING,No content found
+TESTING,No content found
+UNIT_TEST,No content found
+pre_posting_code,"def pre_posting_code(postings, effective_date):
+    status_code = _get_parameter(vault, ""status_code"", union=True)
+    list_payment_schedule = _get_parameter(
+        vault, ""list_payment_schedule"", optional=True, default_value=""[]"", is_json=True
+    )
+    phase = _get_parameter(
+        vault,
+        ""phase"",
+        optional=True,
+        union=True,
+        default_value=UnionItemValue(key=""CONTRACTING""),
+    )
+    risk_premium_settled = _get_parameter(vault, ""risk_premium_settlement"")
+    _validate_phase(phase)
+    _validate_status_code(status_code)
+    _control_posting_instructions(postings, status_code)
+    _validate_tirage(postings, list_payment_schedule, risk_premium_settled)
+    _validate_postings_amount(postings, vault, address=AVAILABLE)"
+_validate_phase,"def _validate_phase(phase):
+    """"""
+    Validates if the phase is in the correct value for making transaction
+
+    Args:
+        phase (str): the value for the phase parameter
+    Raises:
+        Rejected
+    """"""
+    if phase.lower() != ""management"":
+        raise Rejected(
+            f""Cannot make transaction; Phase must be at MANAGEMENT"",
+            reason_code=RejectedReason.CLIENT_CUSTOM_REASON,
+        )"
+_validate_status_code,"def _validate_status_code(status_code):
+    """"""
+    Validates if the status_code is in the correct value for making transaction
+
+    Args:
+        status_code (str): the value for the status_code parameter
+    Raises:
+        Rejected
+    """"""
+    if status_code.lower() != ""approved"":
+        raise Rejected(
+            f""Cannot make transaction; Status code must be APPROVED"",
+            reason_code=RejectedReason.CLIENT_CUSTOM_REASON,
+        )"
+_validate_tirage,"def _validate_tirage(postings, list_payment_schedule, risk_premium_settled):
+    """"""
+    For the first payment_schedule the risk_premium must be settled to be able to realize one Disbursement
+
+    Args:
+        postings (List[PostingInstructions])
+        list_payment_schedule (List[Dict])
+        risk_premium_settled (bool)
+    Raises:
+        Rejected
+    """"""
+    for posting in postings:
+        if posting.instruction_details[
+            ""event_type""
+        ] == ""DISBURSEMENT"" and not _risk_premiun_settled(
+            list_payment_schedule, risk_premium_settled
+        ):
+            raise Rejected(
+                f""Cannot make a tirage with the risk premium not settled"",
+                reason_code=RejectedReason.CLIENT_CUSTOM_REASON,
+            )"
+_risk_premiun_settled,"def _risk_premiun_settled(list_payment_schedule, risk_premium_settled):
+    """"""
+    For the first payment_schedule the risk_premium must be settled
+
+    Args:
+        list_payment_schedule (List[Dict])
+        risk_premium_settled (bool)
+    Returns:
+        bool: If it's valid or not
+    """"""
+    if not risk_premium_settled and len(list_payment_schedule) == 0:
+        return False
+    return True"
+_validate_postings_amount,"def _validate_postings_amount(postings, vault, address=None):
+    """"""
+    Check if the address has the right amount requested by the posting, this only validates from postings that aren't from the same account
+
+    Args:
+        postings (List[PostingInstruction])
+        vault (Vault)
+        address: str
+    Raises:
+        Rejected
+    """"""
+    for posting in postings:
+        if not _posting_account_is_the_same_account(vault, posting):
+            continue
+        account_address = address if address else posting.account_address
+        balance_amount = _get_balance_at(vault, account_address)
+        if not _balance_has_available_amount_for_posting(posting, balance_amount):
+            raise Rejected(
+                f""Cannot make transaction; Address {posting.account_address} has less amount than the requested, current amount :{balance_amount} requested: {posting.amount}"",
+                reason_code=RejectedReason.INSUFFICIENT_FUNDS,
+            )"
+_posting_account_is_the_same_account,"def _posting_account_is_the_same_account(vault, posting):
+    """"""
+    Function to verify if the posting is from the current account
+
+    Args:
+        vault (Vault)
+        posting (PostingInstruction)
+    Returns:
+        bool: If it's frokn the account
+    """"""
+    return posting.account_id == vault.account_id"
+_balance_has_available_amount_for_posting,"def _balance_has_available_amount_for_posting(posting, balance_amount):
+    """"""
+    Function to verify if the posting has the good amount accordingly with the balance
+
+    Args:
+        posting (PostingInstruction)
+        balance_amount (Decimal): the amount from the balance
+    Returns:
+        bool: If it's frokn the account
+    """"""
+    if posting.amount > balance_amount:
+        return False
+    return True"
+_control_posting_instructions,"def _control_posting_instructions(postings, status_code):
+    """"""
+    Check if the posting has the mandatory fields and has the correct event_type
+
+    Args:
+        postings (List[PostingInstruction])
+        status_code (str)
+    Raises:
+        Rejected
+    """"""
+    for posting in postings:
+        has_mandatory_fields, missing_field = _posting_has_mandatory_fields(
+            posting, status_code
+        )
+        if not has_mandatory_fields:
+            raise Rejected(
+                f""Cannot make transaction; Missing mandatory field in instruction_details : {missing_field}"",
+                reason_code=RejectedReason.CLIENT_CUSTOM_REASON,
+            )
+        if not _posting_has_correct_event_type(posting):
+            raise Rejected(
+                f""Cannot make transaction; event_type not recognized : {posting.instruction_details['event_type']}"",
+                reason_code=RejectedReason.CLIENT_CUSTOM_REASON,
+            )"
+_posting_has_correct_event_type,"def _posting_has_correct_event_type(posting):
+    """"""
+    Function to verify if the posting has the correct event_type
+
+    Args:
+        posting (PostingInstruction)
+    Returns:
+        bool
+    """"""
+    event_type_values = [""TIRAGE"", ""DISBURSEMENT"", ""REALISED"", ""REIMBURSEMENT""]
+    if not posting.instruction_details[""event_type""] in event_type_values:
+        return False
+    return True"
+_posting_has_mandatory_fields,"def _posting_has_mandatory_fields(posting, status_code):
+    """"""
+    Function to verify if the posting has all the instruction details accordingly wit the status_code
+    Args:
+        posting (PostingInstruction)
+    Returns:
+        bool
+    """"""
+    mandatory_fields = {
+        ""DRAFT"": [""event_type"", ""id_ref"", ""drawing_code"", ""status_code""],
+        ""PENDING"": [
+            ""id_ref"",
+            ""amount"",
+            ""buyer_credit_amount"",
+            ""drawing_code"",
+            ""drawing_currency"",
+            ""drawing_date"",
+            ""status_code"",
+            ""supplier_bae_company_identifier"",
+            ""supplier_ret_company_identifier"",
+            ""supplier_rgp_actor_code"",
+        ],
+        ""APPROVED"": [
+            ""id_ref"",
+            ""amount"",
+            ""buyer_credit_amount"",
+            ""drawing_code"",
+            ""drawing_currency"",
+            ""drawing_date"",
+            ""status_code"",
+            ""supplier_bae_company_identifier"",
+            ""supplier_ret_company_identifier"",
+            ""supplier_rgp_actor_code"",
+        ],
+    }
+    for field in mandatory_fields[status_code]:
+        if (
+            field not in posting.instruction_details
+            or not posting.instruction_details[field]
+        ):
+            return (False, field)
+    return (True, None)"
+test_post_posting_code_should_send_a_note,"def test_post_posting_code_should_send_a_note(self):
+    start_date = datetime(month=11, day=22, year=2022)
+    default_parameters_values_custom = default_parameters_values.copy()
+    default_parameters_values_custom[""sdrDate""] = datetime(month=8, day=16, year=2022)
+    default_parameters_values_custom[""date_first_repayment""] = start_date
+    default_parameters_values_custom[""date_last_repayment""] = (
+        start_date + relativedelta(months=120)
+    )
+    default_parameters_values_custom[""loan_duration""] = Decimal(""10"")
+    default_parameters_values_custom[""last_repayment_date""] = (
+        start_date + relativedelta(months=120)
+    )
+    default_parameters_values_custom[""date_drawing_effective""] = OptionalValue(
+        start_date
+    )
+    default_parameters_values_custom[""amount_registered""] = Decimal(""23823288.28"")
+    default_parameters_values_custom[""riskPremiumAmount""] = Decimal(""2366124.64"")
+    default_parameters_values_custom[""interestRate""] = Decimal(""1.29"")
+    default_parameters_values_custom[""maturityNumber""] = Decimal(""1"")
+    default_parameters_values_custom[""list_payment_schedule""] = OptionalValue(
+        json.dumps([])
+    )
+    mock_vault = self.create_mock(
+        balance_ts=self.balance_ts,
+        denomination=""EUR"",
+        postings=self.test_postings,
+        **default_parameters_values_custom,
+    )
+    mock_vault.get_hook_execution_id.return_value = create_execution_id()
+    posting_instruction = self.mock_posting_instruction(
+        amount=10,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={""event_type"": ""DISBURSEMENT"", ""tirage_id"": ""1""},
+    )
+    test_postings = self.create_postings_batch(
+        [posting_instruction], self.effective_date
+    )
+    self.run_function(
+        ""post_posting_code"",
+        mock_vault,
+        postings=test_postings,
+        effective_date=self.effective_date,
+    )
+    self.assertTrue(has_calls(mock_vault, ""add_account_note""))"
+test_post_posting_code_shouldn_send_a_note,"def test_post_posting_code_shouldn_send_a_note(self):
+    start_date = datetime(month=11, day=22, year=2022)
+    default_parameters_values_custom = default_parameters_values.copy()
+    default_parameters_values_custom[""sdrDate""] = datetime(month=8, day=16, year=2022)
+    default_parameters_values_custom[""date_first_repayment""] = start_date
+    default_parameters_values_custom[""date_last_repayment""] = (
+        start_date + relativedelta(months=120)
+    )
+    default_parameters_values_custom[""creation_date""] = start_date
+    default_parameters_values_custom[""amount_registered""] = Decimal(""23823288.28"")
+    default_parameters_values_custom[""riskPremiumAmount""] = Decimal(""2366124.64"")
+    default_parameters_values_custom[""interestRate""] = Decimal(""1.29"")
+    default_parameters_values_custom[""list_payment_schedule""] = OptionalValue(
+        json.dumps([])
+    )
+    mock_vault = self.create_mock(
+        balance_ts=self.balance_ts,
+        denomination=""EUR"",
+        postings=self.test_postings,
+        **default_parameters_values_custom,
+    )
+    mock_vault.get_hook_execution_id.return_value = create_execution_id()
+    posting_instruction = self.mock_posting_instruction(
+        amount=10,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={""tirage_id"": ""1"", ""event_type"": ""NOTTIRAGE""},
+    )
+    test_postings = self.create_postings_batch(
+        [posting_instruction], self.effective_date
+    )
+
+    self.run_function(
+        ""post_posting_code"",
+        mock_vault,
+        postings=test_postings,
+        effective_date=self.effective_date,
+    )
+    self.assertFalse(has_calls(mock_vault, ""start_workflow""))"
+test_post_posting_code_disbursement,"def test_post_posting_code_disbursement(self):
+    start_date = datetime(month=11, day=22, year=2022)
+    default_parameters_values_custom = default_parameters_values.copy()
+    default_parameters_values_custom[""sdrDate""] = datetime(month=8, day=16, year=2023)
+    default_parameters_values_custom[""date_first_repayment""] = start_date
+    default_parameters_values_custom[""date_last_repayment""] = (
+        start_date + relativedelta(months=120)
+    )
+    default_parameters_values_custom[""loan_duration""] = Decimal(""10"")
+    default_parameters_values_custom[""last_repayment_date""] = (
+        start_date + relativedelta(months=120)
+    )
+    default_parameters_values_custom[""date_drawing_effective""] = OptionalValue(
+        start_date
+    )
+    default_parameters_values_custom[""amount_registered""] = Decimal(""23823288.28"")
+    default_parameters_values_custom[""riskPremiumAmount""] = Decimal(""2366124.64"")
+    default_parameters_values_custom[""interestRate""] = Decimal(""1.29"")
+    default_parameters_values_custom[""maturityNumber""] = Decimal(""1"")
+    default_parameters_values_custom[""list_payment_schedule""] = OptionalValue(
+        json.dumps([])
+    )
+    mock_vault = self.create_mock(
+        balance_ts=self.balance_ts,
+        denomination=""EUR"",
+        postings=self.test_postings,
+        **default_parameters_values_custom,
+    )
+    mock_vault.get_hook_execution_id.return_value = create_execution_id()
+    posting_instruction = self.mock_posting_instruction(
+        amount=10,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={""event_type"": ""DISBURSEMENT"", ""tirage_id"": ""1""},
+    )
+    test_postings = self.create_postings_batch(
+        [posting_instruction], self.effective_date
+    )
+    self.run_function(
+        ""post_posting_code"",
+        mock_vault,
+        postings=test_postings,
+        effective_date=self.effective_date,
+    )
+    self.assertTrue(has_calls(mock_vault, ""make_internal_transfer_instructions""))"
+test_do_disbursement,"def test_do_disbursement(self):
+    mock_vault = self.create_mock(
+        balance_ts=self.balance_ts,
+        denomination=""EUR"",
+        postings=self.test_postings,
+        **default_parameters_values,
+    )
+    mock_vault.get_hook_execution_id.return_value = create_execution_id()
+    self.run_function(
+        ""_do_disbursement"",
+        mock_vault,
+        vault=mock_vault,
+        amount=Decimal(""1000.00""),
+    )
+    self.assertEqual(count_calls(mock_vault, ""make_internal_transfer_instructions""), 3)"
+test_pre_posting_code,"def test_pre_posting_code(self):
+    posting_instruction = self.mock_posting_instruction(
+        amount=10,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={""tirage_id"": ""1""},
+    )
+    test_postings = self.create_postings_batch(
+        [posting_instruction], self.effective_date
+    )
+    with self.assertRaises(Rejected) as e:
+        result = self.run_function(
+            ""pre_posting_code"",
+            self.mock_vault,
+            postings=test_postings,
+            effective_date=self.effective_date,
+        )
+    self.assertEqual(e.exception.reason_code, RejectedReason.CLIENT_CUSTOM_REASON)"
+test_validate_phase,"def test_validate_phase(self):
+        self.run_function(""_validate_phase"", self.mock_vault, phase=""MANAGEMENT"")
+
+        with self.assertRaises(Rejected) as e:
+            self.run_function(""_validate_phase"", self.mock_vault, phase=""CONTRACTING"")
+        self.assertEqual(e.exception.reason_code, RejectedReason.CLIENT_CUSTOM_REASON)"
+test_validate_status_code,"def test_validate_status_code(self):
+        self.run_function(
+            ""_validate_status_code"", self.mock_vault, status_code=""APPROVED""
+        )
+
+        with self.assertRaises(Rejected) as e:
+            self.run_function(
+                ""_validate_status_code"", self.mock_vault, status_code=""DRAFT""
+            )
+        self.assertEqual(e.exception.reason_code, RejectedReason.CLIENT_CUSTOM_REASON)
+
+        with self.assertRaises(Rejected) as e:
+            self.run_function(
+                ""_validate_status_code"", self.mock_vault, status_code=""PENDING""
+            )
+        self.assertEqual(e.exception.reason_code, RejectedReason.CLIENT_CUSTOM_REASON)"
+test_validate_tirage,"def test_validate_tirage(self):
+    posting_instruction = self.mock_posting_instruction(
+        amount=10,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={""event_type"": ""DISBURSEMENT"", ""tirage_id"": ""1""},
+    )
+    test_postings = self.create_postings_batch(
+        [posting_instruction], self.effective_date
+    )
+    self.run_function(
+        ""_validate_tirage"",
+        self.mock_vault,
+        postings=test_postings,
+        list_payment_schedule=[],
+        risk_premium_settled=True,
+    )
+    with self.assertRaises(Rejected) as e:
+        self.run_function(
+            ""_validate_tirage"",
+            self.mock_vault,
+            postings=test_postings,
+            list_payment_schedule=[],
+            risk_premium_settled=False,
+        )
+    self.assertEqual(e.exception.reason_code, RejectedReason.CLIENT_CUSTOM_REASON)
+    self.run_function(
+        ""_validate_tirage"",
+        self.mock_vault,
+        postings=test_postings,
+        list_payment_schedule=[
+            {
+                ""date_tirage"": ""22-11-2023"",
+                ""id_tirage"": ""1"",
+                ""expected_payment_schedule"": [
+                    {
+                        ""payment_number"": 1,
+                        ""payment_date"": ""22-11-2022"",
+                        ""days"": 10,
+                        ""borrower"": {""principal"": 1000, ""interests"": 2000},
+                        ""loan"": {""principal"": 2000, ""interests"": 1000},
+                        ""premium"": {""principal"": 5000, ""interests"": 1000},
+                        ""total_principal"": 1000,
+                        ""total_interests"": 1000,
+                        ""total_treasury"": 2000,
+                    },
+                    {
+                        ""payment_number"": 2,
+                        ""payment_date"": ""22-05-2023"",
+                        ""days"": 10,
+                        ""borrower"": {""principal"": 9000, ""interests"": 2000},
+                        ""loan"": {""principal"": 3000, ""interests"": 1000},
+                        ""premium"": {""principal"": 1000, ""interests"": 1000},
+                        ""total_principal"": 9000,
+                        ""total_interests"": 1000,
+                        ""total_treasury"": 2000,
+                    },
+                ],
+            },
+            {
+                ""date_tirage"": ""22-02-2024"",
+                ""id_tirage"": ""2"",
+                ""expected_payment_schedule"": [
+                    {
+                        ""payment_number"": 1,
+                        ""payment_date"": ""22-11-2022"",
+                        ""days"": 5,
+                        ""borrower"": {""principal"": 1000, ""interests"": 2000},
+                        ""loan"": {""principal"": 2000, ""interests"": 1000},
+                        ""premium"": {""principal"": 5000, ""interests"": 1000},
+                        ""total_principal"": 1000,
+                        ""total_interests"": 1000,
+                        ""total_treasury"": 2000,
+                    },
+                    {
+                        ""payment_number"": 2,
+                        ""payment_date"": ""22-05-2023"",
+                        ""days"": 10,
+                        ""borrower"": {""principal"": 9000, ""interests"": 2000},
+                        ""loan"": {""principal"": 3000, ""interests"": 1000},
+                        ""premium"": {""principal"": 1000, ""interests"": 1000},
+                        ""total_principal"": 9000,
+                        ""total_interests"": 1000,
+                        ""total_treasury"": 2000,
+                    },
+                ],
+            },
+        ],
+        risk_premium_settled=True,
+    )"
+test_risk_premiun_settled,"def test_risk_premiun_settled(self):
+    result = self.run_function(
+        ""_risk_premiun_settled"",
+        self.mock_vault,
+        list_payment_schedule=[],
+        risk_premium_settled=True,
+    )
+    self.assertTrue(result)
+    result = self.run_function(
+        ""_risk_premiun_settled"",
+        self.mock_vault,
+        list_payment_schedule=[],
+        risk_premium_settled=False,
+    )
+    self.assertFalse(result)
+    result = self.run_function(
+        ""_risk_premiun_settled"",
+        self.mock_vault,
+        list_payment_schedule=[
+            {
+                ""date_tirage"": ""22-11-2023"",
+                ""id_tirage"": ""1"",
+                ""expected_payment_schedule"": [
+                    {
+                        ""payment_number"": 1,
+                        ""payment_date"": ""22-11-2022"",
+                        ""days"": 10,
+                        ""borrower"": {""principal"": 1000, ""interests"": 2000},
+                        ""loan"": {""principal"": 2000, ""interests"": 1000},
+                        ""premium"": {""principal"": 5000, ""interests"": 1000},
+                        ""total_principal"": 1000,
+                        ""total_interests"": 1000,
+                        ""total_treasury"": 2000,
+                    },
+                    {
+                        ""payment_number"": 2,
+                        ""payment_date"": ""22-05-2023"",
+                        ""days"": 10,
+                        ""borrower"": {""principal"": 9000, ""interests"": 2000},
+                        ""loan"": {""principal"": 3000, ""interests"": 1000},
+                        ""premium"": {""principal"": 1000, ""interests"": 1000},
+                        ""total_principal"": 9000,
+                        ""total_interests"": 1000,
+                        ""total_treasury"": 2000,
+                    },
+                ],
+            },
+            {
+                ""date_tirage"": ""22-02-2024"",
+                ""id_tirage"": ""2"",
+                ""expected_payment_schedule"": [
+                    {
+                        ""payment_number"": 1,
+                        ""payment_date"": ""22-11-2022"",
+                        ""days"": 5,
+                        ""borrower"": {""principal"": 1000, ""interests"": 2000},
+                        ""loan"": {""principal"": 2000, ""interests"": 1000},
+                        ""premium"": {""principal"": 5000, ""interests"": 1000},
+                        ""total_principal"": 1000,
+                        ""total_interests"": 1000,
+                        ""total_treasury"": 2000,
+                    },
+                    {
+                        ""payment_number"": 2,
+                        ""payment_date"": ""22-05-2023"",
+                        ""days"": 10,
+                        ""borrower"": {""principal"": 9000, ""interests"": 2000},
+                        ""loan"": {""principal"": 3000, ""interests"": 1000},
+                        ""premium"": {""principal"": 1000, ""interests"": 1000},
+                        ""total_principal"": 9000,
+                        ""total_interests"": 1000,
+                        ""total_treasury"": 2000,
+                    },
+                ],
+            },
+        ],
+        risk_premium_settled=True,
+    )
+    self.assertTrue(result)"
+test_validate_postings_amount,"def test_validate_postings_amount(self):
+    balance_dict = create_balances(
+        [
+            {""key"": LI_ADDRESS, ""value"": Decimal(10)},
+            {""key"": P_ADDRESS, ""value"": Decimal(10)},
+            {""key"": MF_ADDRESS, ""value"": Decimal(10)},
+            {""key"": MFC_ADDRESS, ""value"": Decimal(10)},
+            {""key"": SFC_ADDRESS, ""value"": Decimal(10)},
+            {""key"": DITC_ADDRESS, ""value"": Decimal(10)},
+            {""key"": DIC_ADDRESS, ""value"": Decimal(10)},
+            {""key"": AA_ADDRESS, ""value"": Decimal(10000)},
+            {""key"": DEFAULT_ADDRESS, ""value"": Decimal(2500)},
+        ]
+    )
+    balance_ts = [(self.effective_date, balance_dict)]
+    posting_instruction = self.mock_posting_instruction(
+        amount=1000,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={""event_type"": ""DISBURSEMENT"", ""tirage_id"": ""1""},
+        account_id=ACCOUNT_ID,
+    )
+    test_postings = self.create_postings_batch(
+        [posting_instruction], self.effective_date
+    )
+    mock_vault = self.create_mock(
+        balance_ts=balance_ts,
+        denomination=""EUR"",
+        postings=test_postings,
+        **default_parameters_values,
+    )
+    # Not raise an exception
+    self.run_function(
+        ""_validate_postings_amount"",
+        mock_vault,
+        postings=test_postings,
+        vault=mock_vault,
+    )
+
+    balance_dict = create_balances(
+        [
+            {""key"": LI_ADDRESS, ""value"": Decimal(10)},
+            {""key"": P_ADDRESS, ""value"": Decimal(10)},
+            {""key"": MF_ADDRESS, ""value"": Decimal(10)},
+            {""key"": MFC_ADDRESS, ""value"": Decimal(10)},
+            {""key"": SFC_ADDRESS, ""value"": Decimal(10)},
+            {""key"": DITC_ADDRESS, ""value"": Decimal(10)},
+            {""key"": DIC_ADDRESS, ""value"": Decimal(10)},
+            {""key"": AA_ADDRESS, ""value"": Decimal(10000)},
+            {""key"": DEFAULT_ADDRESS, ""value"": Decimal(2500)},
+        ]
+    )
+    balance_ts = [(self.effective_date, balance_dict)]
+    posting_instruction = self.mock_posting_instruction(
+        amount=3000,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={""event_type"": ""DISBURSEMENT"", ""tirage_id"": ""1""},
+        account_id=ACCOUNT_ID,
+    )
+    test_postings = self.create_postings_batch(
+        [posting_instruction], self.effective_date
+    )
+    mock_vault = self.create_mock(
+        balance_ts=balance_ts,
+        denomination=""EUR"",
+        postings=test_postings,
+        **default_parameters_values,
+    )
+    # Raise an exception
+    with self.assertRaises(Rejected) as e:
+        self.run_function(
+            ""_validate_postings_amount"",
+            mock_vault,
+            postings=test_postings,
+            vault=mock_vault,
+        )
+    self.assertEqual(e.exception.reason_code, RejectedReason.INSUFFICIENT_FUNDS)"
+test_control_posting_instructions_without_event_type,"def test_control_posting_instructions_without_event_type(self):
+    posting_instruction = self.mock_posting_instruction(
+        amount=10,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={""tirage_id"": ""1""},
+    )
+    test_postings = self.create_postings_batch(
+        [posting_instruction], self.effective_date
+    )
+    with self.assertRaises(Rejected) as e:
+        result = self.run_function(
+            ""_control_posting_instructions"",
+            self.mock_vault,
+            postings=test_postings,
+            status_code=""DRAFT"",
+        )
+    self.assertEqual(e.exception.reason_code, RejectedReason.CLIENT_CUSTOM_REASON)"
+test_control_posting_instructions_without_tirage_id,"def test_control_posting_instructions_without_tirage_id(self):
+    posting_instruction = self.mock_posting_instruction(
+        amount=10,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={""tirage_id"": ""1""},
+    )
+    test_postings = self.create_postings_batch(
+        [posting_instruction], self.effective_date
+    )
+    with self.assertRaises(Rejected) as e:
+        result = self.run_function(
+            ""_control_posting_instructions"",
+            self.mock_vault,
+            postings=test_postings,
+            status_code=""DRAFT"",
+        )
+    self.assertEqual(e.exception.reason_code, RejectedReason.CLIENT_CUSTOM_REASON)"
+test_posting_has_correct_event_type_incorrect_event_type,"def test_posting_has_correct_event_type_incorrect_event_type(self):
+    posting_instruction = self.mock_posting_instruction(
+        amount=10,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={""event_type"": ""INCORRECT"", ""tirage_id"": ""1""},
+    )
+    result = self.run_function(
+        ""_posting_has_correct_event_type"",
+        self.mock_vault,
+        posting=posting_instruction,
+    )
+    self.assertEqual(result, False)"
+test_posting_has_correct_event_type_none_event_type,"def test_posting_has_correct_event_type_none_event_type(self):
+    posting_instruction = self.mock_posting_instruction(
+        amount=10,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={""event_type"": None, ""tirage_id"": ""1""},
+    )
+    result = self.run_function(
+        ""_posting_has_correct_event_type"",
+        self.mock_vault,
+        posting=posting_instruction,
+    )
+    self.assertEqual(result, False)"
+test_posting_has_correct_event_type_blank_event_type,"def test_posting_has_correct_event_type_blank_event_type(self):
+    posting_instruction = self.mock_posting_instruction(
+        amount=10,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={""event_type"": """", ""tirage_id"": ""1""},
+    )
+    result = self.run_function(
+        ""_posting_has_correct_event_type"",
+        self.mock_vault,
+        posting=posting_instruction,
+    )
+    self.assertEqual(result, False)"
+test_posting_has_correct_event_type_tirage_event_type,"def test_posting_has_correct_event_type_tirage_event_type(self):
+    posting_instruction = self.mock_posting_instruction(
+        amount=10,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={""event_type"": ""DISBURSEMENT"", ""tirage_id"": ""1""},
+    )
+    result = self.run_function(
+        ""_posting_has_correct_event_type"",
+        self.mock_vault,
+        posting=posting_instruction,
+    )
+    self.assertEqual(result, True)"
+test_posting_has_mandatory_fields,"def test_posting_has_mandatory_fields(self):
+    posting_instruction = self.mock_posting_instruction(
+        amount=10,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={
+            ""event_type"": ""DISBURSEMENT"",
+            ""tirage_id"": ""1"",
+            ""id_ref"": ""1"",
+            ""drawing_code"": ""100"",
+            ""status_code"": ""DRAFT"",
+        },
+    )
+    result = self.run_function(
+        ""_posting_has_mandatory_fields"",
+        self.mock_vault,
+        posting=posting_instruction,
+        status_code=""DRAFT"",
+    )
+    self.assertEqual((True, None), result)"
+test_posting_has_mandatory_fields_without_event_type,"def test_posting_has_mandatory_fields_without_event_type(self):
+    posting_instruction = self.mock_posting_instruction(
+        amount=10,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={""tirage_id"": ""1""},
+    )
+    result = self.run_function(
+        ""_posting_has_mandatory_fields"",
+        self.mock_vault,
+        posting=posting_instruction,
+        status_code=""DRAFT"",
+    )
+    self.assertEqual((False, ""event_type""), result)"
+test_posting_has_mandatory_fields_empty_event_type,"def test_posting_has_mandatory_fields_empty_event_type(self):
+    posting_instruction = self.mock_posting_instruction(
+        amount=10,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={""event_type"": """", ""tirage_id"": ""1""},
+    )
+    result = self.run_function(
+        ""_posting_has_mandatory_fields"",
+        self.mock_vault,
+        posting=posting_instruction,
+        status_code=""DRAFT"",
+    )
+    self.assertEqual((False, ""event_type""), result)"
+test_posting_has_mandatory_fields_none_event_type,"def test_posting_has_mandatory_fields_none_event_type(self):
+    posting_instruction = self.mock_posting_instruction(
+        amount=10,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={""event_type"": None, ""tirage_id"": ""1""},
+    )
+    result = self.run_function(
+        ""_posting_has_mandatory_fields"",
+        self.mock_vault,
+        posting=posting_instruction,
+        status_code=""DRAFT"",
+    )
+    self.assertEqual((False, ""event_type""), result)"
+test_posting_has_mandatory_fields_pending,"def test_posting_has_mandatory_fields_pending(self):
+    posting_instruction = self.mock_posting_instruction(
+        amount=10,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={
+            ""id_ref"": ""1"",
+            ""amount"": ""1000"",
+            ""buyer_credit_amount"": ""1000"",
+            ""drawing_code"": ""100"",
+            ""drawing_currency"": ""EUR"",
+            ""drawing_date"": ""01-01-2024"",
+            ""status_code"": ""PENDING"",
+            ""supplier_bae_company_identifier"": ""ID"",
+            ""supplier_ret_company_identifier"": ""ID"",
+            ""supplier_rgp_actor_code"": ""100"",
+        },
+    )
+    result = self.run_function(
+        ""_posting_has_mandatory_fields"",
+        self.mock_vault,
+        posting=posting_instruction,
+        status_code=""PENDING"",
+    )
+    self.assertEqual((True, None), result)
+
+    posting_instruction = self.mock_posting_instruction(
+        amount=10,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={
+            ""id_ref"": ""1"",
+            ""amount"": ""1000"",
+            ""buyer_credit_amount"": ""1000"",
+            ""drawing_code"": ""100"",
+            ""drawing_date"": ""01-01-2024"",
+            ""status_code"": ""PENDING"",
+            ""supplier_bae_company_identifier"": ""ID"",
+            ""supplier_ret_company_identifier"": ""ID"",
+            ""supplier_rgp_actor_code"": ""100"",
+        },
+    )
+    result = self.run_function(
+        ""_posting_has_mandatory_fields"",
+        self.mock_vault,
+        posting=posting_instruction,
+        status_code=""PENDING"",
+    )
+    self.assertEqual((False, ""drawing_currency""), result)"
+test_posting_has_mandatory_fields_approved,"def test_posting_has_mandatory_fields_approved(self):
+    posting_instruction = self.mock_posting_instruction(
+        amount=10,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={
+            ""id_ref"": ""1"",
+            ""amount"": ""1000"",
+            ""buyer_credit_amount"": ""1000"",
+            ""drawing_code"": ""100"",
+            ""drawing_currency"": ""EUR"",
+            ""drawing_date"": ""01-01-2024"",
+            ""status_code"": ""APPROVED"",
+            ""supplier_bae_company_identifier"": ""ID"",
+            ""supplier_ret_company_identifier"": ""ID"",
+            ""supplier_rgp_actor_code"": ""100"",
+        },
+    )
+    result = self.run_function(
+        ""_posting_has_mandatory_fields"",
+        self.mock_vault,
+        posting=posting_instruction,
+        status_code=""APPROVED"",
+    )
+    self.assertEqual((True, None), result)
+    posting_instruction = self.mock_posting_instruction(
+        amount=10,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={
+            ""id_ref"": ""1"",
+            ""amount"": ""1000"",
+            ""buyer_credit_amount"": ""1000"",
+            ""drawing_code"": ""100"",
+            ""drawing_date"": ""01-01-2024"",
+            ""status_code"": ""APPROVED"",
+            ""supplier_bae_company_identifier"": ""ID"",
+            ""supplier_ret_company_identifier"": ""ID"",
+            ""supplier_rgp_actor_code"": ""100"",
+        },
+    )
+    result = self.run_function(
+        ""_posting_has_mandatory_fields"",
+        self.mock_vault,
+        posting=posting_instruction,
+        status_code=""APPROVED"",
+    )
+    self.assertEqual((False, ""drawing_currency""), result)"
+test_posting_account_is_the_same_account,"def test_posting_account_is_the_same_account(self):
+
+    posting_instruction = self.mock_posting_instruction(
+        amount=1000,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={""event_type"": ""DISBURSEMENT"", ""tirage_id"": ""1""},
+        account_id=ACCOUNT_ID,
+    )
+
+    result = self.run_function(
+        ""_posting_account_is_the_same_account"",
+        self.mock_vault,
+        posting=posting_instruction,
+        vault=self.mock_vault,
+    )
+    self.assertTrue(result)
+    posting_instruction = self.mock_posting_instruction(
+        amount=1000,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={""event_type"": ""DISBURSEMENT"", ""tirage_id"": ""1""},
+        account_id=""NOT_"" + ACCOUNT_ID,
+    )
+
+    result = self.run_function(
+        ""_posting_account_is_the_same_account"",
+        self.mock_vault,
+        posting=posting_instruction,
+        vault=self.mock_vault,
+    )
+
+    self.assertFalse(result)"
+test_balance_has_available_amount_for_posting,"def test_balance_has_available_amount_for_posting(self):
+
+    posting_instruction = self.mock_posting_instruction(
+        amount=1000,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={""event_type"": ""DISBURSEMENT"", ""tirage_id"": ""1""},
+        account_id=ACCOUNT_ID,
+    )
+
+    result = self.run_function(
+        ""_balance_has_available_amount_for_posting"",
+        self.mock_vault,
+        posting=posting_instruction,
+        balance_amount=10000,
+    )
+    self.assertTrue(result)
+    posting_instruction = self.mock_posting_instruction(
+        amount=1000,
+        credit=10,
+        value_timestamp=self.effective_date + timedelta(days=1),
+        instruction_details={""event_type"": ""DISBURSEMENT"", ""tirage_id"": ""1""},
+        account_id=ACCOUNT_ID,
+    )
+
+    result = self.run_function(
+        ""_balance_has_available_amount_for_posting"",
+        self.mock_vault,
+        posting=posting_instruction,
+        balance_amount=900,
+    )
+
+    self.assertFalse(result)"
+post_posting_code,"def post_posting_code(postings, effective_date):
+    vault.add_account_note(
+        body=f""Initializing the calculation: {len(postings)}"",
+        note_type=NoteType.RAW_TEXT,
+        is_visible_to_customer=True,
+        date=datetime.utcnow(),
+    )
+    for posting in postings:
+        amount = posting.amount
+        if posting.instruction_details[""event_type""] == ""DISBURSEMENT"":
+            vault.add_account_note(
+                body=""DISBURSEMENT"",
+                note_type=NoteType.RAW_TEXT,
+                is_visible_to_customer=True,
+                date=datetime.utcnow(),
+            )
+
+            _do_disbursement(vault, amount)"
+_do_disbursement,"def _do_disbursement(vault, amount):
+    """"""
+    Do disbursement postings
+    AVAILABLE -> PENDING_OUTSTANDING
+    PENDING_DISBURSEMENT -> TOTAL_DISBURSEMENT
+    PENDING_OUTSTANDING -> DEFAULT
+
+    Args:
+        vault (vault object): It can be a mock_vault or the vault object
+        amount: The amount to be transfered
+    """"""
+    posting_disbursment = vault.make_internal_transfer_instructions(
+        amount=amount,
+        denomination=""EUR"",
+        client_transaction_id=""DISBURSEMENT_1_""
+        + vault.account_id
+        + ""_""
+        + _make_timestamp(),
+        from_account_id=vault.account_id,
+        from_account_address=AVAILABLE,
+        to_account_id=vault.account_id,
+        to_account_address=PENDING_OUTSTANDING,
+        pics=[],
+        instruction_details={""amount"": str(amount), ""operation_code"": ""VLD""},
+        asset=DEFAULT_ASSET,
+    )
+    instructions = []
+    instructions.extend(posting_disbursment)
+    vault.instruct_posting_batch(
+        posting_instructions=instructions, effective_date=datetime.utcnow()
+    )
+    posting_pending = vault.make_internal_transfer_instructions(
+        amount=amount,
+        denomination=""EUR"",
+        client_transaction_id=""DISBURSEMENT_2_""
+        + vault.account_id
+        + ""_""
+        + _make_timestamp(),
+        from_account_id=vault.account_id,
+        from_account_address=PENDING_DISBURSEMENT,
+        to_account_id=vault.account_id,
+        to_account_address=TOTAL_DISBURSEMENT,
+        pics=[],
+        instruction_details={""amount"": str(amount), ""operation_code"": ""RLD""},
+        asset=DEFAULT_ASSET,
+    )
+    instructions = []
+    instructions.extend(posting_pending)
+    vault.instruct_posting_batch(
+        posting_instructions=instructions, effective_date=datetime.utcnow()
+    )
+    posting_pending = vault.make_internal_transfer_instructions(
+        amount=amount,
+        denomination=""EUR"",
+        client_transaction_id=""DISBURSEMENT_3_""
+        + vault.account_id
+        + ""_""
+        + _make_timestamp(),
+        from_account_id=vault.account_id,
+        from_account_address=PENDING_OUTSTANDING,
+        to_account_id=vault.account_id,
+        to_account_address=DEFAULT,
+        pics=[],
+        instruction_details={""amount"": str(amount), ""operation_code"": ""RLD""},
+        asset=DEFAULT_ASSET,
+    )
+    instructions = []
+    instructions.extend(posting_pending)
+    vault.instruct_posting_batch(
+        posting_instructions=instructions, effective_date=datetime.utcnow()
+    )"
+_number_to_string,"def _number_to_string(number):
+    """"""
+    Standard way to convert number to string with the good precision
+
+    Args:
+        number (number): A number value to convert to string
+    Returns:
+        str: the number formated wit 2 decimal places
+    """"""
+    return ""{0:.2f}"".format(number)"
+_make_random_number,"def _make_random_number(max):
+    """"""
+    Function to calculate a random number
+
+    Args:
+        max (int): The maximum value for a random number to be
+    Returns:
+        int: The random number
+    """"""
+    microsecond = datetime.utcnow().microsecond
+    random = int(microsecond * 1000)
+    random %= max
+    return random"
+to_decimal,"def to_decimal(value):
+    """"""
+    Safe way to convert to decimal
+
+    Args:
+        value(str|number): A string representing a number or any number type
+    Returns:
+        Decimal: value converted to decimal
+    """"""
+    return Decimal(str(value))"
+_round_to_precision,"def _round_to_precision(precision, amount):
+    """"""
+    Round a decimal value to required precision
+
+    Args:
+        precision (Decimal): number of decimal places to round to
+        amount (Decimal): amount to round
+    Returns:
+        Decimal: Rounded amount
+    """"""
+    decimal_string = str(Decimal(""1.0"") / pow(10, precision))
+    return amount.quantize(Decimal(decimal_string).normalize(), rounding=ROUND_HALF_UP)"
+_hollidays_list,"def _hollidays_list(date):
+    """"""
+    The list of the hollidays in the year for the date informed
+
+    Args:
+        date (datetime): The day the it's desired to calculate
+    Returns:
+        list[dict[str, datetime]]: a list of dictionaries with the name of the holliday being the key and the datetime being the value
+    """"""
+    easter_sunday = _gauss_easter(date.year)
+    hollidays = {
+        ""news_years_eve"": datetime(day=1, month=1, year=date.year),
+        ""easter_monday"": easter_sunday + timedelta(days=1),
+        ""labor_day"": datetime(day=1, month=5, year=date.year),
+        ""wii_victory_day"": datetime(day=8, month=5, year=date.year),
+        ""ascension_day"": easter_sunday + timedelta(days=39),
+        ""whit_monday"": easter_sunday + timedelta(days=50),
+        ""bastille_day"": datetime(day=14, month=7, year=date.year),
+        ""mary_assumption"": datetime(day=15, month=8, year=date.year),
+        ""all_saints"": datetime(day=1, month=11, year=date.year),
+        ""armistice_day"": datetime(day=11, month=11, year=date.year),
+        ""christmas_day"": datetime(day=25, month=12, year=date.year),
+    }
+    return list(hollidays.values())"
+_gauss_easter,"def _gauss_easter(y):
+    """"""
+    Calculates the gauss easter day for the year
+
+    Args:
+        y (int): The year the it's desired to calculate
+    Returns:
+        datetime: The datetime representing the date that the gauss easter happens in that year.
+    """"""
+    a = y // 100
+    b = y % 100
+    c = (3 * (a + 25)) // 4
+    d = (3 * (a + 25)) % 4
+    e = (8 * (a + 11)) // 25
+    f = (5 * a + b) % 19
+    g = (19 * f + c - e) % 30
+    h = (f + 11 * g) // 319
+    j = (60 * (5 - d) + b) // 4
+    k = (60 * (5 - d) + b) % 4
+    m = (2 * j - k - g + h) % 7
+    n = (g - h + m + 114) // 31
+    p = (g - h + m + 114) % 31
+    day = p + 1
+    month = n
+    return datetime(year=y, month=month, day=day)"
+_get_periods_per_year,"def _get_periods_per_year(payment_schedule_frequency):
+    """"""
+    Returns the number of periods in the year that a frequency type have.
+
+    Args:
+        payment_schedule_frequency (str): 'S', 'T', 'A' or 'M'
+    Returns:
+        int: The amount of months in that period
+    """"""
+    frequency_map = {""S"": 12 // 2, ""T"": 12 // 3, ""A"": 12 // 1, ""M"": 12 // 12}
+    return frequency_map.get(payment_schedule_frequency, 0)"
+_date_to_string,"def _date_to_string(date):
+    """"""
+    Converts the datetime object to string
+
+    Args:
+        date (datetime): The date to be converted
+    Returns:
+        str: The representation of the date in the DD-MM-YYYY format
+    """"""
+    return f""{date.day:02d}-{date.month:02d}-{date.year:04d}"""
+_date_in_range,"def _date_in_range(start_date, end_date, query_date):
+    """"""
+    Check if the date is within a range
+
+    Args:
+        start_date (datetime): first day of the range
+        end_date (datetime): last day of the tirage
+        query_date (datetime): day to be tested
+    Returns:
+        bool: if the date is in the range
+    """"""
+    return query_date >= start_date and query_date <= end_date"
+_get_last_day_of_month,"def _get_last_day_of_month(queried_date):
+    """"""
+    Gets the last of the month in the queried date
+
+    Args:
+        queried_date (datetime): the day that it's desired to query from
+    Returns:
+        datetime: the last day from the queried month
+    """"""
+    current_month = (
+        datetime(year=queried_date.year, month=queried_date.month, day=1)
+        + timedelta(months=1)
+        - timedelta(days=1)
+    )
+    return current_month"
+_is_the_last_day_of_month,"def _is_the_last_day_of_month(queried_date):
+    """"""
+    Determines wheter its the last of month or not
+
+    Args:
+        queried_date (datetime): The day that it's wanted to be tested
+    Returns:
+        bool: Wheter the day is the last day or not
+    """"""
+    end_of_month_date = _get_last_day_of_month(queried_date)
+    if queried_date.day == end_of_month_date.day:
+        return True
+    return False"
+_string_to_date,"def _string_to_date(date_string):
+    """"""
+    Converts date from string (DD-MM-YYYY) to datetime object
+
+    Args:
+        param date_string (str): string of date to convert in the DD-MM-YYYY format
+    Returns:
+        datetime: representation of date
+    """"""
+    split_date = date_string.split(""-"")
+    date = datetime(
+        year=int(split_date[2]),
+        month=int(split_date[1]),
+        day=int(split_date[0]),
+    )
+    return date"
+_datetime_to_string,"def _datetime_to_string(date):
+    """"""
+    Converts datetime to string but keeping the HH:MM:SS
+    Args:
+        date (datetime): The date to be converted
+    Returns:
+        str: The representation of the date in the DD-MM-YYYY_HH:MM:SS format
+    """"""
+    return f""{date.day:02d}-{date.month:02d}-{date.year:04d}_{date.time()}"""
+_make_timestamp,"def _make_timestamp():
+    """"""
+    Make a timestamp useful for making internal postings
+
+    Returns:
+        str: The datetime.utcnow converted in string in the following format DD_MM_YYY_S
+    """"""
+    return f""{_date_to_string(datetime.utcnow()).replace('-','_').replace(' ', '_')}_{datetime.utcnow().microsecond}"""
+current_milli_time,"def current_milli_time(timestamp):
+    """"""
+
+    Args:
+        timestamp (str): last part of the vault.get_hook_execution_id() split by '_'
+    Returns:
+        str: One number in string format representing the milliseconds from the timestamp
+    """"""
+    return str(round(int(timestamp) / 1000000))"
+_calculate_new_day,"def _calculate_new_day(today, reduction_frequency):
+    """"""
+    Calculates a new day using the frequency ('M', 'T', 'S', 'A')
+
+    Args:
+        today(datetime): the date to be added
+        reduction_frequency (str): the frequency ('M', 'T', 'S', 'A') to add the amount of months to the date
+    Returns:
+        datetime: The calculated date
+    """"""
+    months = 0
+    if (frequency := _get_periods_per_year(reduction_frequency)) != 0:
+        months = 12 // frequency
+    new_day = today + timedelta(months=months)
+    return new_day"
+_get_number_of_days_between_dates,"def _get_number_of_days_between_dates(start_date, end_date):
+    """"""
+    Calculates the number of days between two dates, always return a positive number
+
+    Args:
+        start_date (datetime): first day for the calculation
+        end_date (datetime): last day for the calculation
+    Returns:
+        int: number of days between the two dates, positive number.
+    """"""
+    return abs((end_date - start_date).days)"
+_validate_union_shape,"def _validate_union_shape(value, keys):
+    """"""
+    Validates an union shape parameter, if the values is in the intended keys
+
+    Args:
+        value (str): the value for validation
+        keys (list[str]): the collection of values tha the union shape parameter can have
+    Returns:
+        bool: if the value is valid
+    """"""
+    if value not in keys:
+        return False
+    return True"
+_validate_date_string,"def _validate_date_string(date_string):
+    """"""
+    Validates the date string to be in a valid format DD-MM-YYYY
+
+    Args:
+        date_string (str): string representing the date
+    Returns:
+        bool: if the string is valid
+    """"""
+    for character in date_string:
+        if character != ""-"" and not character.isnumeric():
+            return False
+    date_string_split = date_string.split(""-"")
+    if len(date_string_split) != 3:
+        return False
+    if len(date_string_split[0]) != 2:
+        return False
+    if len(date_string_split[1]) != 2:
+        return False
+    if len(date_string_split[2]) != 4:
+        return False
+    day, month, year = (
+        int(date_string_split[0]),
+        int(date_string_split[1]),
+        int(date_string_split[2]),
+    )
+    if month > 12:
+        return False
+    init_of_month = datetime(day=1, month=month, year=year)
+    end_of_month = _get_last_date_of_month(init_of_month)
+    if day > end_of_month.day:
+        return False
+    return True"
+_validate_number_string,"def _validate_number_string(number_string):
+    """"""
+    Validates the string that is supossed to represent a number in the following format 9999.99
+
+    Args:
+        number_string (str): The string representing the number
+    Returns:
+        bool: If the strins is valid
+    """"""
+    return number_string.replace(""."", """", 1).isnumeric() and float(number_string) >= 0"
+_get_parameter,"def _get_parameter(
+    vault, name, at=None, is_json=False, optional=False, union=False, default_value=None
+):
+    """"""
+    Get the parameter value for a given parameter
+
+    Args:
+        vault (vault object): It can be a mock_vault or the vault object
+        name (str): name of the parameter to retrieve
+        at (datetime): time at which to retrieve the parameter value. If not specified the latest value is retrieved
+        union (bool): if True parameter will be treated as a UnionItem
+        is_json (bool): if True json_loads is called on the retrieved parameter value
+        optional (bool): if True we treat the parameter as optional
+        default_value (Any): if the optional function parameter is True, and the optional parameter is not set, this value is returned
+    Returns:
+         Any: the parameter value
+    """"""
+
+    if at:
+        parameter = vault.get_parameter_timeseries(name=name).at(timestamp=at)
+    else:
+        parameter = vault.get_parameter_timeseries(name=name).latest()
+
+    if optional:
+        parameter = parameter.value if parameter.is_set() else default_value
+
+    if union:
+        parameter = parameter.key
+
+    if is_json:
+        parameter = json_loads(parameter)
+
+    return parameter"
+_get_list_from_parameter,"def _get_list_from_parameter(parameter):
+    """"""
+    Used to convert to list string parameter that were meant to be list
+
+    Args:
+        parameter(str): The value from the parameter
+    Returns:
+        list[str]: List converted from the sting
+    """"""
+    return json_loads(parameter)"
+_get_balance_at,"def _get_balance_at(vault, address, timestamp: datetime = None) -> Decimal:
+    """"""
+    Get the balance at an specific address optionally at a specific datetime
+
+    Args:
+        vault (vault object): It can be a mock_vault or the vault object
+        address (str): Address for the balance
+        timestamp (datetime): The date for geting the amount if None it'll get the entire amount
+    Returns:
+        Decimal: The amount of the address
+    """"""
+    balances = (
+        vault.get_balance_timeseries().latest()
+        if timestamp is None
+        else vault.get_balance_timeseries().at(timestamp=timestamp)
+    )
+    denomination = EUR
+    if _address_exists(balances, address):
+        return Decimal(
+            balances[(address, DEFAULT_ASSET, denomination, Phase.COMMITTED)].net
+        )
+    return Decimal(""0.00"")"
+_address_exists,"def _address_exists(balances, name):
+    """"""
+    Checks if there is already an address for a given name.
+
+    Args:
+        balances (dict): balance dimensions to balance values
+        name (str): name to check
+    Return:
+        bool: True if there is already an open loan for the given id
+    """"""
+    principal_addresses = _get_all_addresses(balances)
+    for principal_address in principal_addresses:
+        if principal_address == name:
+            return True
+    return False"
+_get_all_addresses,"def _get_all_addresses(balances):
+    """"""
+    Gets all claim addresses.
+
+    Args:
+        balances (dict): balance dimensions to balance values
+    Returns:
+        List[str]: list of balance addresses that match address_type and batch_id
+    """"""
+    return [
+        balance_dimensions[0] for balance_dimensions, balance_amount in balances.items()
+    ]"
+_create_posting,"def _create_posting(
+    vault,
+    amount,
+    denomination,
+    from_account_id,
+    from_account_address,
+    to_account_id,
+    to_account_address,
+    asset,
+    client_transaction_id,
+    instruction_details,
+):
+    """"""
+    Create an internal posting
+
+    Args:
+        vault (vault object): It can be a mock_vault or the vault object
+        amount (Decimal): Amount to be transfered
+        denomination (str): Denomination to be used
+        from_account_id (str): The id where the amount will be taken of
+        from_account_address (str): The address from the account that the money will be taken of
+        to_account_id (str): The id from the account that will receive the money
+        to_account_address (str): The address where the money will be put
+        asset (str): The asset for this posting, use the DEFAULT_ASSET from vault
+        client_transaction_id (str): Id for the posting, each posting from the same account has to have different ids
+        instruction_details (dict): The addional informations for the posting
+    """"""
+    posting_instruction = []
+    posting_instruction.extend(
+        vault.make_internal_transfer_instructions(
+            amount=Decimal(amount),
+            denomination=denomination,
+            from_account_id=from_account_id,
+            from_account_address=from_account_address,
+            to_account_id=to_account_id,
+            to_account_address=to_account_address,
+            asset=asset,
+            client_transaction_id=client_transaction_id,
+            instruction_details=instruction_details,
+        )
+    )
+    vault.instruct_posting_batch(
+        posting_instructions=posting_instruction, effective_date=datetime.now()
+    )"
+_get_parameter_from_parameters_list,"def _get_parameter_from_parameters_list(
+    vault,
+    parameters,
+    parameter_name,
+    default_value=None,
+    optional=False,
+    union=False,
+    is_parameter_type=False,
+):
+    """"""
+    Get parameter version from parameters list (pre_parameter_change_code, post_parameter_chnage_code)
+
+    Args:
+        vault (vault object): It can be a mock_vault or the vault object
+        parameters (list[Parameter(Any)|Any]): It's a list of Parameter (pre_parameter_change_code) or Any type (post_parameter_change_code)
+        parameter_name (string): the name of the parameter ti get from parameters_list
+        default_value (Any): if the optional function parameter is True, and the optional parameter is not set, this value is returned
+        optional (bool): if True  the parameter is treated as optional
+        union (bool): if True parameter will be treated as a UnionItem
+        is_parameter_type (bool): True for pre_parameter_change_code, Fale for post_parameter_change_code
+    Returns:
+         Any: the parameter value
+    """"""
+    value = None
+    if parameter_name in parameters:
+        value = parameters[parameter_name]
+        if is_parameter_type:
+            value = value.value
+        if optional:
+            value = value.value
+            if value is None:
+                value = default_value
+
+        if union:
+            value = value.key
+    else:
+        value = _get_parameter(
+            vault=vault,
+            name=parameter_name,
+            union=union,
+            optional=optional,
+            default_value=default_value,
+        )
+    return value"
+has_calls,"def has_calls(vault, call_string):
+    for i in vault.mock_calls:
+        if call_string in str(i):
+            return True
+    return False"
+count_calls,"def count_calls(vault, call_string):
+    count = 0
+    for i in vault.mock_calls:
+        if call_string in str(i):
+            count += 1
+    return count"
+create_balances,"def create_balances(addresses):
+    balance_dict = {}
+    for address in addresses:
+        balance_dict[(address[""key""], DEFAULT_ASSET, ""EUR"", Phase.COMMITTED)] = Balance(
+            net=address[""value""]
+        )
+    return balance_dict"
+create_execution_id,"def create_execution_id():
+    return ""MOCK_{}_{}_{}"".format(
+        random.randint(0, 1000), random.randint(0, 1000), random.randint(0, 1000)
+    )"
+create_postings_batch,"def create_postings_batch(self, posting_instructions, effective_date):
+        """"""
+        Creates a posting instruction batch to be used in the vault object.
+        """"""
+        return self.mock_posting_instruction_batch(
+            effective_date,
+            denomination=""EUR"",
+            posting_instructions=posting_instructions,
+        )"
+setUp,"def setUp(self):
+        """"""
+        Instantiate common used objects for the testing cases.
+        """"""
+        super().setUp()
+        self.effective_date = datetime.utcnow()
+        self.instruction_details = {
+            ""event_type"": ""DIRECT_DEBIT"",
+            ""functional_domain"": ""PSU"",
+            ""transfer_transaction_label"": ""LABEL"",
+            ""transfer_transaction_short_id"": ""ID"",
+            ""direct_debit_type"": ""FRAI"",
+            ""invoice_identifier"": ""ID"",
+            ""analytic_imputation"": ""ANALYTIC"",
+            ""direct_debit_local_identifier"": ""DIR_DEBIT_ID"",
+            ""TVA"": ""TVA"",
+            ""operation_code"": ""RQD"",
+            ""amount_before_tax"": ""0"",
+            ""amount_with_TVA"": ""0"",
+            ""Facture"": ""01"",
+        }
+        self.posting_instruction = self.mock_posting_instruction(
+            amount=10,
+            credit=10,
+            value_timestamp=self.effective_date + timedelta(days=1),
+            instruction_details=self.instruction_details,
+        )
+        self.test_postings = self.create_postings_batch(
+            [self.posting_instruction], self.effective_date
+        )
+        self.balance_dict = create_balances(
+            [
+                {""key"": DEFAULT_ADDRESS, ""value"": Decimal(10)},
+            ]
+        )
+        self.balance_dict[
+            (
+                f""INVOICE_PSU_FC_{self.effective_date.strftime('%Y-%m-%d')}"",
+                ""COMMERCIAL_BANK_MONEY"",
+                ""EUR"",
+                Phase.COMMITTED,
+            )
+        ] = Balance(net=Decimal(10))
+
+        self.balance_ts = [(self.effective_date, self.balance_dict)]
+        self.mock_vault = self.create_mock(
+            balance_ts=self.balance_ts,
+            denomination=""EUR"",
+            postings=self.test_postings,
+            **default_parameters_values,
+        )
+        self.mock_vault.get_hook_execution_id.return_value = create_execution_id()"
+create_mock,"def create_mock(
+        self,
+        balance_ts=None,
+        postings=None,
+        creation_date=DEFAULT_DATE,
+        client_transaction=None,
+        flags=None,
+        **kwargs,
+    ):
+        balance_ts = balance_ts or []
+        postings = postings or []
+        client_transaction = client_transaction or {}
+        flags = flags or []
+
+        params = {
+            key: {""value"": value}
+            for key, value in locals().items()
+            if key not in self.locals_to_ignore
+        }
+        parameter_ts = self.param_map_to_timeseries(params, creation_date)
+        return super().create_mock(
+            balance_ts=balance_ts,
+            parameter_ts=parameter_ts,
+            postings=postings,
+            creation_date=creation_date,
+            client_transaction=client_transaction,
+            flags=flags,
+            **kwargs,
+        )"
+test_number_to_string,"def test_number_to_string(self):
+        result = self.run_function(""_number_to_string"", self.mock_vault, number=1000)
+        self.assertEqual(
+            ""1000.00"",
+            result,
+        )
+        result = self.run_function(""_number_to_string"", self.mock_vault, number=54.12)
+        self.assertEqual(
+            ""54.12"",
+            result,
+        )
+        result = self.run_function(
+            ""_number_to_string"", self.mock_vault, number=3.14159265
+        )
+        self.assertEqual(
+            ""3.14"",
+            result,
+        )
+        result = self.run_function(""_number_to_string"", self.mock_vault, number=1.6666)
+        self.assertEqual(
+            ""1.67"",
+            result,
+        )"
+test_make_random_numberp,"def test_make_random_numberp(self):
+        max_value = 10
+        for i in range(20):
+            result = self.run_function(
+                ""_make_random_number"", self.mock_vault, max=max_value
+            )
+            self.assertLessEqual(result, max_value)"
+test_to_decimal,"def test_to_decimal(self):
+        inputs = [
+            (""0.1"", Decimal(""0.1"")),
+            (2, Decimal(""2"")),
+            (3.5, Decimal(""3.5"")),
+            (Decimal(""0""), Decimal(""0"")),
+        ]
+        for input in inputs:
+            result = self.run_function(""to_decimal"", self.mock_vault, value=input[0])
+            self.assertEqual(input[1], result)"
+test_round_to_precision,"def test_round_to_precision(self):
+        result = self.run_function(
+            ""_round_to_precision"",
+            self.mock_vault,
+            precision=2,
+            amount=Decimal(3.14159265),
+        )
+        self.assertEqual(
+            Decimal(""3.14""),
+            result,
+        )"
+test_hollidays_list,"def test_hollidays_list(self):
+        result = self.run_function(
+            ""_hollidays_list"", self.mock_vault, date=datetime(day=2, month=2, year=2024)
+        )
+        self.assertEqual(
+            [
+                datetime(day=1, month=1, year=2024),
+                datetime(day=1, month=4, year=2024),
+                datetime(day=1, month=5, year=2024),
+                datetime(day=8, month=5, year=2024),
+                datetime(day=9, month=5, year=2024),
+                datetime(day=20, month=5, year=2024),
+                datetime(day=14, month=7, year=2024),
+                datetime(day=15, month=8, year=2024),
+                datetime(day=1, month=11, year=2024),
+                datetime(day=11, month=11, year=2024),
+                datetime(day=25, month=12, year=2024),
+            ],
+            result,
+        )"
+test_gauss_easter,"def test_gauss_easter(self):
+        dates = [
+            [""4"", ""23"", ""2000""],
+            [""4"", ""15"", ""2001""],
+            [""3"", ""31"", ""2002""],
+            [""4"", ""20"", ""2003""],
+            [""4"", ""11"", ""2004""],
+            [""3"", ""27"", ""2005""],
+            [""4"", ""16"", ""2006""],
+            [""4"", ""8"", ""2007""],
+            [""3"", ""23"", ""2008""],
+            [""4"", ""12"", ""2009""],
+            [""4"", ""4"", ""2010""],
+            [""4"", ""24"", ""2011""],
+            [""4"", ""8"", ""2012""],
+            [""3"", ""31"", ""2013""],
+            [""4"", ""20"", ""2014""],
+            [""4"", ""5"", ""2015""],
+            [""3"", ""27"", ""2016""],
+            [""4"", ""16"", ""2017""],
+            [""4"", ""1"", ""2018""],
+            [""4"", ""21"", ""2019""],
+            [""4"", ""12"", ""2020""],
+            [""4"", ""4"", ""2021""],
+            [""4"", ""17"", ""2022""],
+            [""4"", ""9"", ""2023""],
+            [""3"", ""31"", ""2024""],
+            [""4"", ""20"", ""2025""],
+            [""4"", ""5"", ""2026""],
+            [""3"", ""28"", ""2027""],
+            [""4"", ""16"", ""2028""],
+            [""4"", ""1"", ""2029""],
+            [""4"", ""21"", ""2030""],
+            [""4"", ""13"", ""2031""],
+            [""3"", ""28"", ""2032""],
+            [""4"", ""17"", ""2033""],
+            [""4"", ""9"", ""2034""],
+            [""3"", ""25"", ""2035""],
+            [""4"", ""13"", ""2036""],
+            [""4"", ""5"", ""2037""],
+            [""4"", ""25"", ""2038""],
+            [""4"", ""10"", ""2039""],
+            [""4"", ""1"", ""2040""],
+            [""4"", ""21"", ""2041""],
+            [""4"", ""6"", ""2042""],
+            [""3"", ""29"", ""2043""],
+            [""4"", ""17"", ""2044""],
+            [""4"", ""9"", ""2045""],
+            [""3"", ""25"", ""2046""],
+            [""4"", ""14"", ""2047""],
+            [""4"", ""5"", ""2048""],
+            [""4"", ""18"", ""2049""],
+            [""4"", ""10"", ""2050""],
+            [""4"", ""2"", ""2051""],
+            [""4"", ""21"", ""2052""],
+            [""4"", ""6"", ""2053""],
+            [""3"", ""29"", ""2054""],
+            [""4"", ""18"", ""2055""],
+            [""4"", ""2"", ""2056""],
+            [""4"", ""22"", ""2057""],
+            [""4"", ""14"", ""2058""],
+            [""3"", ""30"", ""2059""],
+            [""4"", ""18"", ""2060""],
+            [""4"", ""10"", ""2061""],
+            [""3"", ""26"", ""2062""],
+            [""4"", ""15"", ""2063""],
+            [""4"", ""6"", ""2064""],
+            [""3"", ""29"", ""2065""],
+            [""4"", ""11"", ""2066""],
+            [""4"", ""3"", ""2067""],
+            [""4"", ""22"", ""2068""],
+            [""4"", ""14"", ""2069""],
+            [""3"", ""30"", ""2070""],
+            [""4"", ""19"", ""2071""],
+            [""4"", ""10"", ""2072""],
+            [""3"", ""26"", ""2073""],
+            [""4"", ""15"", ""2074""],
+            [""4"", ""7"", ""2075""],
+            [""4"", ""19"", ""2076""],
+            [""4"", ""11"", ""2077""],
+            [""4"", ""3"", ""2078""],
+            [""4"", ""23"", ""2079""],
+            [""4"", ""7"", ""2080""],
+            [""3"", ""30"", ""2081""],
+            [""4"", ""19"", ""2082""],
+            [""4"", ""4"", ""2083""],
+            [""3"", ""26"", ""2084""],
+            [""4"", ""15"", ""2085""],
+            [""3"", ""31"", ""2086""],
+            [""4"", ""20"", ""2087""],
+            [""4"", ""11"", ""2088""],
+            [""4"", ""3"", ""2089""],
+            [""4"", ""16"", ""2090""],
+            [""4"", ""8"", ""2091""],
+            [""3"", ""30"", ""2092""],
+            [""4"", ""12"", ""2093""],
+            [""4"", ""4"", ""2094""],
+            [""4"", ""24"", ""2095""],
+            [""4"", ""15"", ""2096""],
+            [""3"", ""31"", ""2097""],
+            [""4"", ""20"", ""2098""],
+            [""4"", ""12"", ""2099""],
+        ]
+
+        for date in dates:
+            result = self.run_function(""_gauss_easter"", self.mock_vault, y=int(date[2]))
+            self.assertEqual(
+                datetime(day=int(date[1]), month=int(date[0]), year=int(date[2])),
+                result,
+            )"
+test_periods_per_year_returning_type,"def test_periods_per_year_returning_type(self):
+        result = self.run_function(
+            ""_get_periods_per_year"", None, payment_schedule_frequency=""S""
+        )
+        self.assertTrue(isinstance(result, int))
+        self.assertEqual(6, result)"
+test_date_to_string,"def test_date_to_string(self):
+        result = self.run_function(
+            ""_date_to_string"",
+            self.mock_vault,
+            date=datetime(day=15, month=8, year=2023),
+        )
+        self.assertEqual(""15-08-2023"", result)"
+test_date_in_range,"def test_date_in_range(self):
+        result = self.run_function(
+            ""_date_in_range"",
+            self.mock_vault,
+            start_date=datetime(day=15, month=8, year=2023),
+            end_date=datetime(day=15, month=10, year=2023),
+            query_date=datetime(day=10, month=9, year=2023),
+        )
+        self.assertTrue(result)
+
+        result = self.run_function(
+            ""_date_in_range"",
+            self.mock_vault,
+            start_date=datetime(day=15, month=8, year=2023),
+            end_date=datetime(day=15, month=10, year=2023),
+            query_date=datetime(day=15, month=9, year=2024),
+        )
+        self.assertFalse(result)"
+test_get_last_day_of_month,"def test_get_last_day_of_month(self):
+        result = self.run_function(
+            ""_get_last_day_of_month"",
+            self.mock_vault,
+            queried_date=datetime(day=1, month=4, year=2024),
+        )
+        self.assertEqual(datetime(day=30, month=4, year=2024).date(), result.date())
+
+        result = self.run_function(
+            ""_get_last_day_of_month"",
+            self.mock_vault,
+            queried_date=datetime(day=1, month=2, year=2024),
+        )
+        self.assertEqual(datetime(day=29, month=2, year=2024).date(), result.date())"
+test_is_the_last_day_of_month,"def test_is_the_last_day_of_month(self):
+        result = self.run_function(
+            ""_is_the_last_day_of_month"",
+            self.mock_vault,
+            queried_date=datetime(day=1, month=4, year=2024),
+        )
+        self.assertFalse(result)
+
+        result = self.run_function(
+            ""_is_the_last_day_of_month"",
+            self.mock_vault,
+            queried_date=datetime(day=29, month=2, year=2024),
+        )
+        self.assertTrue(result)"
+test_string_to_dateg,"def test_string_to_dateg(self):
+        result = self.run_function(
+            ""_string_to_date"", self.mock_vault, date_string=""15-08-2023""
+        )
+        self.assertEqual(datetime(day=15, month=8, year=2023), result)"
+test_datetime_to_string,"def test_datetime_to_string(self):
+        result = self.run_function(
+            ""_datetime_to_string"",
+            self.mock_vault,
+            date=datetime(
+                day=1, month=2, year=2024, hour=9, minute=30, second=5, microsecond=560
+            ),
+        )
+        self.assertEqual(result, ""01-02-2024_09:30:05.000560"")"
+test_make_timestamp,"def test_make_timestamp(self):
+        result = self.run_function(
+            ""_make_timestamp"",
+            self.mock_vault,
+        )
+        today = datetime.now()
+        self.assertEqual(
+            result.rsplit(""_"", 1)[0],
+            f""{today.day:02d}_{today.month:02d}_{today.year:04d}"",
+        )"
+test_current_milli_time,"def test_current_milli_time(self):
+        result = self.run_function(
+            ""current_milli_time"", self.mock_vault, timestamp=""1000000""
+        )
+        self.assertEqual(
+            ""1"",
+            result,
+        )"
+test_calculate_new_day,"def test_calculate_new_day(self):
+        result = self.run_function(
+            ""_calculate_new_day"",
+            self.mock_vault,
+            today=datetime(day=1, month=4, year=2024),
+            reduction_frequency=""M"",
+        )
+        self.assertEqual(datetime(day=1, month=5, year=2024).date(), result.date())
+
+        result = self.run_function(
+            ""_calculate_new_day"",
+            self.mock_vault,
+            today=datetime(day=1, month=4, year=2024),
+            reduction_frequency=""L"",
+        )
+        self.assertEqual(datetime(day=1, month=4, year=2024).date(), result.date())"
+test_get_number_of_days_between_dates,"def test_get_number_of_days_between_dates(self):
+        expected_outputs = [
+            {
+                ""start_date"": datetime(day=2, month=10, year=2023),
+                ""end_date"": datetime(day=2, month=10, year=2023) + timedelta(days=30),
+                ""result"": 30,
+            },
+            {
+                ""start_date"": datetime(day=2, month=10, year=2023),
+                ""end_date"": datetime(day=2, month=10, year=2023) + timedelta(days=10),
+                ""result"": 10,
+            },
+            {
+                ""start_date"": datetime(day=2, month=10, year=2023) - timedelta(days=30),
+                ""end_date"": datetime(day=2, month=10, year=2023),
+                ""result"": 30,
+            },
+            {
+                ""start_date"": datetime(day=2, month=10, year=2023) - timedelta(days=10),
+                ""end_date"": datetime(day=2, month=10, year=2023),
+                ""result"": 10,
+            },
+        ]
+        for expected_output in expected_outputs:
+            result = self.run_function(
+                ""_get_number_of_days_between_dates"",
+                self.mock_vault,
+                start_date=expected_output[""start_date""],
+                end_date=expected_output[""end_date""],
+            )
+            self.assertEqual(result, expected_output[""result""])"
+test_validate_union_shape,"def test_validate_union_shape(self):
+        result = self.run_function(
+            ""_validate_union_shape"",
+            self.mock_vault,
+            value=""constant_capital"",
+            keys=[""constant_capital"", ""constant_payment"", ""in_fine""],
+        )
+        self.assertTrue(result)
+        result = self.run_function(
+            ""_validate_union_shape"",
+            self.mock_vault,
+            value=""x"",
+            keys=[""constant_capital"", ""constant_payment"", ""in_fine""],
+        )
+        self.assertFalse(result)"
+test_validate_date_string,"def test_validate_date_string(self):
+        result = self.run_function(
+            ""_validate_date_string"",
+            self.mock_vault,
+            date_string=""24-09-2024"",
+        )
+        self.assertTrue(result)
+
+        result = self.run_function(
+            ""_validate_date_string"",
+            self.mock_vault,
+            date_string=""2--09-2024"",
+        )
+        self.assertFalse(result)
+
+        result = self.run_function(
+            ""_validate_date_string"",
+            self.mock_vault,
+            date_string=""24-0.9-2024"",
+        )
+        self.assertFalse(result)
+
+        result = self.run_function(
+            ""_validate_date_string"",
+            self.mock_vault,
+            date_string=""31-02-2024"",
+        )
+        self.assertFalse(result)
+
+        result = self.run_function(
+            ""_validate_date_string"",
+            self.mock_vault,
+            date_string=""2024-02-31"",
+        )
+        self.assertFalse(result)
+
+        result = self.run_function(
+            ""_validate_date_string"",
+            self.mock_vault,
+            date_string=""2024-31-02"",
+        )
+        self.assertFalse(result)"
+test_validate_number_string,"def test_validate_number_string(self):
+        result = self.run_function(
+            ""_validate_number_string"",
+            self.mock_vault,
+            number_string=""1.9"",
+        )
+        self.assertTrue(result)
+
+        result = self.run_function(
+            ""_validate_number_string"",
+            self.mock_vault,
+            number_string=""1"",
+        )
+        self.assertTrue(result)
+
+        result = self.run_function(
+            ""_validate_number_string"",
+            self.mock_vault,
+            number_string=""1a"",
+        )
+        self.assertFalse(result)
+
+        result = self.run_function(
+            ""_validate_number_string"",
+            self.mock_vault,
+            number_string=""-1.9"",
+        )
+        self.assertFalse(result)
+
+        result = self.run_function(
+            ""_validate_number_string"",
+            self.mock_vault,
+            number_string=""1.9.9"",
+        )
+        self.assertFalse(result)
+
+        result = self.run_function(
+            ""_validate_number_string"",
+            self.mock_vault,
+            number_string=""1,9"",
+        )
+        self.assertFalse(result)"
+test_get_parameter_decimal,"def test_get_parameter_decimal(self):
+        """"""
+        Test if the get_parameter returns the object of the parameter's type
+        """"""
+        mock_vault = self.create_mock(
+            balance_ts=self.balance_ts, denomination=""EUR"", test_decimal=Decimal(""10"")
+        )
+        result = self.run_function(
+            ""_get_parameter"", mock_vault, vault=mock_vault, name=""test_decimal""
+        )
+        self.assertTrue(isinstance(result, Decimal))"
+test_get_parameter_decimal_at,"def test_get_parameter_decimal_at(self):
+        """"""
+        Test if the get_parameter returns the object of the parameter's type using the 'at' argument
+        """"""
+        mock_vault = self.create_mock(
+            balance_ts=self.balance_ts, denomination=""EUR"", test_decimal=Decimal(""10"")
+        )
+        result = self.run_function(
+            ""_get_parameter"",
+            mock_vault,
+            vault=mock_vault,
+            name=""test_decimal"",
+            at=self.effective_date,
+        )
+        self.assertTrue(isinstance(result, Decimal))"
+test_get_parameter_optional,"def test_get_parameter_optional(self):
+        """"""
+        Test if the get_parameter returns the object of the parameter's type using the 'at' argument
+        """"""
+        mock_vault = self.create_mock(
+            balance_ts=self.balance_ts,
+            denomination=""EUR"",
+            test_decimal_optional=OptionalValue(Decimal(""10"")),
+        )
+        result = self.run_function(
+            ""_get_parameter"",
+            mock_vault,
+            vault=mock_vault,
+            name=""test_decimal_optional"",
+            optional=True,
+        )
+        self.assertTrue(isinstance(result, Decimal))"
+test_get_parameter_union,"def test_get_parameter_union(self):
+        """"""
+        Test if the get_parameter returns the object of the parameter's type using the 'at' argument
+        """"""
+        mock_vault = self.create_mock(
+            balance_ts=self.balance_ts,
+            denomination=""EUR"",
+            test_union=UnionItemValue(""S""),
+        )
+        result = self.run_function(
+            ""_get_parameter"",
+            mock_vault,
+            vault=mock_vault,
+            name=""test_union"",
+            union=True,
+        )
+        self.assertTrue(isinstance(result, str))"
+test_get_parameter_json,"def test_get_parameter_json(self):
+        """"""
+        Test if the get_parameter returns the object of the parameter's type using the 'is_json' argument
+        """"""
+        mock_vault = self.create_mock(
+            balance_ts=self.balance_ts,
+            denomination=""EUR"",
+            atypical_payment_schedule=json.dumps([{""key"": ""value""}]),
+        )
+        result = self.run_function(
+            ""_get_parameter"",
+            mock_vault,
+            vault=mock_vault,
+            name=""atypical_payment_schedule"",
+            is_json=True,
+        )
+        self.assertTrue(isinstance(result, list))
+        self.assertTrue(isinstance(result[0], dict))"
+test_get_parameter_json_without_the_is_json_argument,"def test_get_parameter_json_without_the_is_json_argument(self):
+        """"""
+        Test if the get_parameter returns the a str type if the parameter is a dict but it's not used the 'is_json' argument
+        """"""
+        mock_vault = self.create_mock(
+            balance_ts=self.balance_ts,
+            denomination=""EUR"",
+            atypical_payment_schedule=json.dumps([{""key"": ""value""}]),
+        )
+        result = self.run_function(
+            ""_get_parameter"",
+            mock_vault,
+            vault=mock_vault,
+            name=""atypical_payment_schedule"",
+        )
+        self.assertTrue(isinstance(result, str))"
+test_get_list_from_parameter,"def test_get_list_from_parameter(self):
+        result = self.run_function(
+            ""_get_list_from_parameter"",
+            self.mock_vault,
+            parameter=json.dumps([9, ""A"", {}, True]),
+        )
+        self.assertEquals(result, [9, ""A"", {}, True])
+
+        result = self.run_function(
+            ""_get_list_from_parameter"",
+            self.mock_vault,
+            parameter=json.dumps([]),
+        )
+        self.assertEquals(result, [])"
+test_get_balance_at,"def test_get_balance_at(self):
+        """"""
+        Simple test to check if the data is in the correct format and value
+        """"""
+        result = self.run_function(
+            ""_get_balance_at"",
+            self.mock_vault,
+            vault=self.mock_vault,
+            address=f""INVOICE_PSU_FC_{self.effective_date.strftime('%Y-%m-%d')}"",
+            timestamp=self.effective_date,
+        )
+        self.assertTrue(isinstance(result, Decimal))
+        self.assertEqual(10, result)"
+test_address_exists,"def test_address_exists(self):
+        """"""
+        Test if the function returns the address in the correct value format
+        """"""
+        balances_addresses = [
+            (
+                self.balance_ts[0][1],
+                f""INVOICE_PSU_FC_{self.effective_date.strftime('%Y-%m-%d')}"",
+                True,
+            ),
+            ({}, f""INVOICE_PSU_FC_{self.effective_date.strftime('%Y-%m-%d')}"", False),
+        ]
+        for balance_address in balances_addresses:
+            result = self.run_function(
+                ""_address_exists"",
+                self.mock_vault,
+                balances=balance_address[0],
+                name=balance_address[1],
+            )
+
+            self.assertTrue(isinstance(result, bool))
+            self.assertEqual(balance_address[2], result)"
+test_get_all_addresses_returning_type,"def test_get_all_addresses_returning_type(self):
+        """"""
+        Test if the function returns the address in the correct value format
+        """"""
+        result = self.run_function(
+            ""_get_all_addresses"", self.mock_vault, balances=self.balance_ts[0][1]
+        )
+
+        self.assertTrue(isinstance(result, list))
+
+        for item in result:
+            self.assertTrue(isinstance(item, str))
+        self.assertEqual([key[0] for key in self.balance_dict.keys()], result)"
+test_create_posting,"def test_create_posting(self):
+        result = self.run_function(
+            ""_create_posting"",
+            self.mock_vault,
+            vault=self.mock_vault,
+            amount=Decimal(""0""),
+            denomination=""EUR"",
+            from_account_id=""test"",
+            from_account_address=""TESTADDRESSFROM"",
+            to_account_id=""test"",
+            to_account_address=""TESTADDRESSTO"",
+            asset=""DEFAULT"",
+            client_transaction_id=""ID"",
+            instruction_details={},
+        )
+        self.assertEqual(
+            count_calls(self.mock_vault, ""make_internal_transfer_instructions""), 0
+        )
+        result = self.run_function(
+            ""_create_posting"",
+            self.mock_vault,
+            vault=self.mock_vault,
+            amount=Decimal(""1000""),
+            denomination=""EUR"",
+            from_account_id=""test"",
+            from_account_address=""TESTADDRESSFROM"",
+            to_account_id=""test"",
+            to_account_address=""TESTADDRESSTO"",
+            asset=""DEFAULT"",
+            client_transaction_id=""ID"",
+            instruction_details={},
+        )
+        self.assertEqual(
+            count_calls(self.mock_vault, ""make_internal_transfer_instructions""), 1
+        )"
+test_get_parameter_from_paramter_list,"def test_get_parameter_from_paramter_list(self):
+        result = self.run_function(
+            ""_get_parameter_from_paramter_list"",
+            self.mock_vault,
+            vault=self.mock_vault,
+            parameters={""phase"": Parameter(value=OptionalValue(""LITIGATION""))},
+            parameter_name=""phase"",
+            default_value=""CONTRACTING"",
+            optional=True,
+            union=False,
+            is_parameter_type=True,
+        )
+        self.assertEqual(""LITIGATION"", result)
+
+        result = self.run_function(
+            ""_get_parameter_from_paramter_list"",
+            self.mock_vault,
+            vault=self.mock_vault,
+            parameters={""phase"": OptionalValue(""LITIGATION"")},
+            parameter_name=""phase"",
+            default_value=""CONTRACTING"",
+            optional=True,
+            union=False,
+            is_parameter_type=False,
+        )
+        self.assertEqual(""LITIGATION"", result)"
+interest_pre_posting,No content found
+interest_schedule_code,No content found
+interest_test,No content found
+interest_post_posting,No content found
+management_fees_test,No content found
+management_fees_pre_posting,No content found
+management_fees_post_posting,No content found
+management_fees_schedule_code,No content found
+simulation_test,No content found
+simulation_derived_parameters,No content found
+new_claim_pre_posting,No content found
+new_claim_fees_test,No content found
+new_claim_post_posting,No content found
+new_claim_schedule_code,No content found
+status_code_post_posting,No content found
+status_code_schedule_code,No content found
+status_code_pre_posting,No content found
+status_code_test,No content found
+direct_debit_test,No content found
+direct_debit_schedule_code,No content found
+direct_debit_post_posting,No content found
+direct_debit_pre_posting,No content found
+interest_payment_test,No content found
+interest_payment_post_posting,No content found
+interest_payment_schedule_code,No content found
+interest_payment_pre_posting,No content found
