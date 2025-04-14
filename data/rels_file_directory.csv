@@ -1,6 +1,6 @@
 :START_ID(File),:END_ID(Directory)
-assets/DISBURSEMENT/disbursement_pre_posting.py,assets/DISBURSEMENT
-assets/DISBURSEMENT/disbursement_test.py,assets/DISBURSEMENT
-assets/DISBURSEMENT/disbursement_post_posting.py,assets/DISBURSEMENT
-assets/INITIALISE SMART CONTRACT/initialise_smart_contract.py,assets/INITIALISE SMART CONTRACT
-assets/INITIALISE SMART CONTRACT/initialise_smart_contract_test.py,assets/INITIALISE SMART CONTRACT
+DISBURSEMENT/disbursement_pre_posting.py,DISBURSEMENT
+DISBURSEMENT/disbursement_test.py,DISBURSEMENT
+DISBURSEMENT/disbursement_post_posting.py,DISBURSEMENT
+INITIALISE SMART CONTRACT/initialise_smart_contract.py,INITIALISE SMART CONTRACT
+INITIALISE SMART CONTRACT/initialise_smart_contract_test.py,INITIALISE SMART CONTRACT
