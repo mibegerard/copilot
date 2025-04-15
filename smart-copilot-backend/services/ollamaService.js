@@ -16,3 +16,13 @@ export const fetchFromOllama = async (prompt) => {
     throw new Error("Failed to fetch response from Ollama");
   }
 };
+
+export const buildContextualPrompt = (userPrompt, context) => {
+  logger.debug("Building contextual prompt", { contextLength: context?.length });
+  
+  return [
+    { role: "system", content: "You are a knowledgeable assistant. Use this context:" },
+    { role: "system", content: context || "No relevant context found" },
+    { role: "user", content: userPrompt }
+  ];
+};
