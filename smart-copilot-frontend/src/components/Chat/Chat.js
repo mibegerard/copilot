@@ -5,22 +5,22 @@ import SyntaxHighlighter from "react-syntax-highlighter";
 import { nightOwl } from "react-syntax-highlighter/dist/esm/styles/prism";
 import "./Chat.css";
 
-function Chat() {
+function Chat({ chat, onUpdateMessages }) {
     const [input, setInput] = useState("");
-    const [history, setHistory] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const chatEndRef = useRef(null);
 
-    // Auto-scroll to bottom when new messages arrive
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [history]);
+    }, [chat.messages]);
 
     const sendMessage = async () => {
         if (!input.trim() || isLoading) return;
 
         const userMessage = { sender: "User", text: input, isCode: false };
-        setHistory((prev) => [...prev, userMessage]);
+        const updatedHistory = [...chat.messages, userMessage];
+
+        onUpdateMessages(updatedHistory);
         setInput("");
         setIsLoading(true);
 
@@ -35,14 +35,14 @@ function Chat() {
                 isCode: res.data.metadata?.containsCode || false,
                 language: res.data.metadata?.language || null,
             };
-            setHistory((prev) => [...prev, botResponse]);
+            onUpdateMessages([...updatedHistory, botResponse]);
         } catch (err) {
             console.error(err);
-            setHistory((prev) => [
-                ...prev,
+            onUpdateMessages([
+                ...updatedHistory,
                 {
                     sender: "Copilot",
-                    text: "Sorry, I encountered an error processing your request.",
+                    text: "Sorry, I encountered an error.",
                     isCode: false,
                 },
             ]);
@@ -61,15 +61,13 @@ function Chat() {
     return (
         <div className="chat-container">
             <div className="chat-history">
-                {history.map((msg, index) => (
-                    <div
-                        key={index}
-                        className={`message ${msg.sender === "User" ? "user" : "bot"}`}
-                    >
-                        <strong>{msg.sender}:</strong>
+                {chat.messages.map((msg, index) => (
+                    <div key={index} className={`message ${msg.sender === "User" ? "user" : "bot"}`}>
+                       
                         {msg.isCode ? (
                             <ReactMarkdown
                                 components={{
+                                    p: ({ node, ...props }) => <div {...props} />,
                                     code({ node, inline, className, children, ...props }) {
                                         const match = /language-(\w+)/.exec(className || "");
                                         return !inline ? (
@@ -101,9 +99,7 @@ function Chat() {
                     <div className="message bot">
                         <strong>Copilot:</strong>
                         <div className="typing-indicator">
-                            <span></span>
-                            <span></span>
-                            <span></span>
+                            <span></span><span></span><span></span>
                         </div>
                     </div>
                 )}
@@ -116,10 +112,7 @@ function Chat() {
                     placeholder="Ask your copilot..."
                     rows="1"
                 />
-                <button
-                    onClick={sendMessage}
-                    disabled={isLoading || !input.trim()}
-                >
+                <button onClick={sendMessage} disabled={isLoading || !input.trim()}>
                     {isLoading ? "..." : "Send"}
                 </button>
             </div>
@@ -127,4 +120,4 @@ function Chat() {
     );
 }
 
-export default Chat;
+export default Chat; 
