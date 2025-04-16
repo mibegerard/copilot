@@ -16,8 +16,14 @@ exports.getChatResponse = async (req, res) => {
       return res.status(400).json({ error: 'Invalid response from chat API' });
     }
 
-    // Send the response from Ollama back to the frontend
-    res.json({ response: response.data.response });
+    // Enhance the response with metadata
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      userMessage: message,
+      ollamaResponse: response.data.response,
+      rawResponse: response.data,
+    });
   } catch (error) {
     console.error("Error in chat API:", error);
 

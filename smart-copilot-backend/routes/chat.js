@@ -2,6 +2,7 @@ import express from "express";
 import { fetchFromOllama } from "../services/ollamaService.js";
 import { searchGraph } from "../services/neo4jService.js";
 import { extractTechnicalKeywords, generateKeywordCombinations } from "../utils/keywordsUtils.js";
+import { formatCodeResponse, detectCodeLanguage, checkIfContainsCode } from "../utils/responseUtils.js";
 import logger from "../utils/logger.js";
 
 const router = express.Router();
@@ -42,7 +43,16 @@ router.post("/", async (req, res) => {
     const ollamaResponse = await fetchFromOllama(prompt);
     logger.info("Response from Ollama", { ollamaResponse });
 
-    res.json({ response: ollamaResponse });
+    // Format the response before sending
+    const formattedResponse = formatCodeResponse(ollamaResponse, dbResults);
+    
+    res.json({ 
+      response: formattedResponse,
+      metadata: {
+        containsCode: checkIfContainsCode(ollamaResponse),
+        language: detectCodeLanguage(dbResults)
+      }
+    });
   } catch (err) {
     logger.error("Error occurred", { error: err.message });
     res.status(500).json({ error: "Something went wrong" });
