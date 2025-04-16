@@ -39,3 +39,4 @@ coverage/
 # Assets
 assets/
 assets.csv
+.env
