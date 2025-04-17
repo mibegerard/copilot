@@ -1,0 +1,3 @@
+component_id:ID(Component),name, type, description
+comp1,Payment Hub,Optional,"Stores payment system rules"  
+comp2,Workflow Engine,Core,"Orchestrates business processes"  

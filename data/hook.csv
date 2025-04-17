@@ -1,0 +1,3 @@
+hook_id:ID(Hook),name, function, description
+hook1,check_balance,"Validate account balance before transaction","Triggered during fund transfers"  
+hook2,apply_interest,"Calculate daily interest","Scheduled execution at EOD"  

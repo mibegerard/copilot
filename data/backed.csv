@@ -1,0 +1,2 @@
+account_id:START_ID(Account),contract_id:END_ID(Contract),relationship_type
+acc1,sc1,BACKED_BY  

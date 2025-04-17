@@ -1,0 +1,2 @@
+balance_id:ID(Balance),attributes, dimensions
+bal1,"Total credits: $1000; Total debits: $500","Asset=USD; Phase=Active"  
