@@ -1,5 +1,6 @@
 import neo4j from "neo4j-driver";
 import dotenv from "dotenv";
+import logger from "../utils/logger.js";
 
 dotenv.config();
 
@@ -8,34 +9,36 @@ const driver = neo4j.driver(
   neo4j.auth.basic(process.env.NEO4J_USERNAME, process.env.NEO4J_PASSWORD)
 );
 
+logger.info("Neo4j Credentials:");
+logger.info("URI:", process.env.NEO4J_URI);
+logger.info("Username:", process.env.NEO4J_USERNAME);
+logger.info("Password:", process.env.NEO4J_PASSWORD ? "******" : "Not Set");
+
 export const checkDatabaseConnection = async () => {
   const session = driver.session();
 
   try {
-    // Vérifier la connexion en exécutant une requête simple
     const result = await session.run(`
       CALL db.labels() YIELD label
       RETURN label
     `);
 
-    console.log("✅ Connected to Neo4j database successfully.");
-    console.log("Available labels in the database:", result.records.map(record => record.get('label')));
+    logger.info("✅ Connected to Neo4j database successfully.");
+    logger.info("Available labels in the database:", result.records.map(record => record.get('label')));
 
-    // Récupérer le nombre total de nœuds
     const nodeCountResult = await session.run(`
       MATCH (n)
       RETURN COUNT(n) AS nodeCount
     `);
     const nodeCount = nodeCountResult.records[0].get('nodeCount');
-    console.log("Total number of nodes in the database:", nodeCount);
+    logger.info("Total number of nodes in the database:", nodeCount);
 
-    // Récupérer le nombre total de relations
     const relationshipCountResult = await session.run(`
       MATCH ()-[r]->()
       RETURN COUNT(r) AS relationshipCount
     `);
     const relationshipCount = relationshipCountResult.records[0].get('relationshipCount');
-    console.log("Total number of relationships in the database:", relationshipCount);
+    logger.info("Total number of relationships in the database:", relationshipCount);
 
     return {
       success: true,
@@ -44,14 +47,13 @@ export const checkDatabaseConnection = async () => {
       relationshipCount,
     };
   } catch (err) {
-    console.error("❌ Failed to connect to Neo4j database:", err.message);
+    logger.error("❌ Failed to connect to Neo4j database:", err.message);
     return { success: false, error: err.message };
   } finally {
     await session.close();
   }
 };
 
-// Search by trying each phrase one-by-one in order, until we find results
 export const searchGraph = async (termsArray, intent) => {
   const session = driver.session();
 
@@ -100,21 +102,17 @@ export const searchGraph = async (termsArray, intent) => {
         LIMIT 3
       `;
 
-      // Log the query being executed
-      console.log("Executing Neo4j query for term:", term);
-      console.log("Query:", query);
-      // Log the final query with the term injected
-      console.log("Final Neo4j query with term injected:", query);
+      logger.info("Executing Neo4j query for term:", term);
+      logger.debug("Query:", query);
+      logger.debug("Final Neo4j query with term injected:", query);
 
       const result = await session.run(query, { term });
 
-      // Debug: Log raw Neo4j result
-      console.log("Raw Neo4j result:", JSON.stringify(result.records, null, 2));
+      logger.debug("Raw Neo4j result:", JSON.stringify(result.records, null, 2));
 
-      // Debug: Log processed results
       const records = result.records.map(record => {
         const res = record.get('result');
-        console.log("Processed result:", res);
+        logger.debug("Processed result:", res);
         return res;
       });
 
@@ -123,10 +121,9 @@ export const searchGraph = async (termsArray, intent) => {
       }
     }
 
-    // If no matches found at all
     return [];
   } catch (err) {
-    console.error("Error in searchGraph:", err.message);
+    logger.error("Error in searchGraph:", err.message);
     return [];
   } finally {
     await session.close();
@@ -143,7 +140,7 @@ export const searchDatabase = async (query) => {
       { query }
     );
     const content = result.records.map((record) => record.get("content")).join("\n");
-    console.log("Neo4j Query Result:", content);
+    logger.info("Neo4j Query Result:", content);
     return content;
   } finally {
     await session.close();
