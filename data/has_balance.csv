@@ -1,2 +1,2 @@
 account_id:START_ID(Account),balance_id:END_ID(Balance),relationship_type
-acc1,bal1,HAS_BALANCE  
+acc1,bal1,HAS_BALANCE

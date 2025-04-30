@@ -1,2 +1,2 @@
 account_id:START_ID(Account),customer_id:END_ID(Customer),relationship_type
-acc1,cust1,ASSOCIATED_WITH  
+acc1,cust1,ASSOCIATED_WITH

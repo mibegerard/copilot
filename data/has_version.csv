@@ -1,2 +1,2 @@
 product_id:START_ID(Product),product_version_id:END_ID(ProductVersion),relationship_type
-prod1,pv1,HAS_VERSION  
+prod1,pv1,HAS_VERSION

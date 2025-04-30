@@ -1,2 +1,2 @@
 batch_id:ID(Batch),description, entries
-batch1,"Fund transfer between accounts","Credit: acc1; Debit: acc2"  
+batch1,"Fund transfer between accounts","Credit: acc1; Debit: acc2"

@@ -1,3 +1,3 @@
 account_id:ID(Account),type, description, is_internal
-acc1,Transactional,"Customer-facing account",false  
-acc2,Internal,"Bank's internal ledger account",true  
+acc1,Transactional,"Customer-facing account",false
+acc2,Internal,"Bank's internal ledger account",true
