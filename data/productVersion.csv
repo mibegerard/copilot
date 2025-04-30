@@ -1,2 +1,2 @@
 product_version_id:ID(ProductVersion),version_code,parameters, supported_denominations
-pv1,v2.1,"{'min_balance': 100}","USD;EUR"  
+pv1,v2.1,"{\"min_balance\": 100}","USD;EUR"
