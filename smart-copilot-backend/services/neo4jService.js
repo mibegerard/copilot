@@ -54,94 +54,101 @@ export const checkDatabaseConnection = async () => {
   }
 };
 
-export const searchGraph = async (termsArray, intent) => {
+export const searchGraph = async (type, value) => {
   const session = driver.session();
+  logger.info("🔍 Searching in Neo4j database...");
 
   try {
-    for (const term of termsArray) {
-      const query = `
-        WITH "${term}" AS term
+    let query = "";
+    let result;
 
-        OPTIONAL MATCH (t:Tag)
-        WHERE toLower(REPLACE(t.name, "_", "")) = toLower(REPLACE(term, " ", ""))
-          AND t.content IS NOT NULL AND t.content <> "No content found"
-
-        OPTIONAL MATCH (f:File)
-        WHERE toLower(REPLACE(f.name, "_", "")) = toLower(REPLACE(term, " ", ""))
-          AND f.content IS NOT NULL AND f.content <> "No content found"
-
-        OPTIONAL MATCH (d:Directory)
-        WHERE toLower(REPLACE(d.name, "_", "")) = toLower(REPLACE(term, " ", ""))
-          AND d.content IS NOT NULL AND d.content <> "No content found"
-
-        WITH COLLECT(DISTINCT {
-          file: f,
-          directory: d,
-          tag: t
-        }) AS matches
-
-        UNWIND matches AS match
-        RETURN {
-          type: CASE
-            WHEN match.tag IS NOT NULL THEN 'Tag'
-            WHEN match.file IS NOT NULL THEN 'File'
-            WHEN match.directory IS NOT NULL THEN 'Directory'
-            ELSE 'Unknown'
-          END,
-          name: COALESCE(match.file.file_path, match.directory.path, match.tag.name),
-          content: COALESCE(match.tag.content, match.file.content, match.directory.content),
-          snippet: COALESCE(
-            REDUCE(s = '', t IN [match.tag] | 
-              CASE WHEN t.content IS NOT NULL THEN s + t.content + '\n' ELSE s END
-            ), 
-            match.file.content
-          ),
-          confidence: 1.0
-        } AS result
-        ORDER BY result.confidence DESC
-        LIMIT 3
+    if (type === "Directory") {
+      const dirPrefix = value.toUpperCase() + "/";
+      query = `
+        MATCH (f:File)
+        WHERE f.file_path STARTS WITH $dirPrefix
+        RETURN collect(f.content) AS result
       `;
+      logger.info(`📁 Searching for all files in directory: ${dirPrefix}`);
+      logger.info("🧠 Query:", query.trim());
+      logger.info("📦 Params:", { dirPrefix });
 
-      logger.info("Executing Neo4j query for term:", term);
-      logger.debug("Query:", query);
-      logger.debug("Final Neo4j query with term injected:", query);
+      result = await session.run(query, { dirPrefix });
 
-      const result = await session.run(query, { term });
+      const contents = result.records[0]?.get("result") || [];
+      if (contents.length > 0) {
+        const combinedContent = contents.join("\n\n");
+        return [{
+          snippet: combinedContent,
+          source: `Directory: ${dirPrefix}`
+        }];
+      }
 
-      logger.debug("Raw Neo4j result:", JSON.stringify(result.records, null, 2));
+    } else if (type === "File") {
+        const words = value.split('/');
 
-      const records = result.records.map(record => {
-        const res = record.get('result');
-        logger.debug("Processed result:", res);
-        return res;
-      });
+        if (words.length > 1) {
+          words[0] = words[0].toUpperCase();
+        } else {
+          const upper = value.split(' ')[0].toUpperCase();
+          const rest = value.replace(/_/g, '');
+          words[0] = `${upper}/${rest}`;
+        }
 
-      if (records.length > 0) {
-        return records;
+        const filePath = words.join('/');
+        query = `
+          MATCH (f:File)
+          WHERE toLower(REPLACE(REPLACE(f.file_path, "_", ""), ".py", "")) = toLower(REPLACE($filePath, " ", ""))
+          RETURN f.content AS result
+          LIMIT 1
+        `;
+
+        logger.info(`📄 Searching file content for: ${value}`);
+        logger.info(`📂 Reconstructed file path: ${filePath}`);
+        logger.info(`🧠 Query: ${query.trim()}`);
+        logger.info(`📦 Params: ${JSON.stringify({ filePath })}`);
+
+        result = await session.run(query, { filePath });
+
+        const content = result.records[0]?.get("result");
+        if (content) {
+          return [{
+            snippet: content,
+            source: `File: ${value}`
+          }];
+        }
+      }
+      else if (type === "Tag") {
+      query = `
+        WITH $tagName AS keywords
+        MATCH (t:Tag)
+        WHERE ANY(keyword IN keywords WHERE
+            toLower(REPLACE(t.name, "_", "")) = toLower(REPLACE(keyword, " ", ""))
+          )
+          AND t.content IS NOT NULL AND t.content <> "No content found"
+        RETURN t.content AS result, t.name AS name
+        LIMIT 1
+      `;
+      logger.info(`🏷️ Searching for tag: ${value}`);
+      logger.info("🧠 Query:", query.trim());
+      logger.info("📦 Params:", { tagName: value });
+
+      result = await session.run(query, { tagName: value });
+
+      const tagContent = result.records[0]?.get("result");
+      if (tagContent) {
+        return [{
+          snippet: tagContent,
+          source: `Tag: ${value}`
+        }];
       }
     }
 
     return [];
-  } catch (err) {
-    logger.error("Error in searchGraph:", err.message);
-    return [];
-  } finally {
-    await session.close();
-  }
-};
 
-export const searchDatabase = async (query) => {
-  const session = driver.session();
-  try {
-    const result = await session.run(
-      `MATCH (n:sc_database)
-       WHERE toLower(n.FilePath) CONTAINS toLower($query) OR toLower(n.Content) CONTAINS toLower($query)
-       RETURN n.Content AS content LIMIT 1`,
-      { query }
-    );
-    const content = result.records.map((record) => record.get("content")).join("\n");
-    logger.info("Neo4j Query Result:", content);
-    return content;
+  } catch (err) {
+    logger.error("❌ Error in searchGraph:", err.message);
+    return [];
   } finally {
     await session.close();
   }

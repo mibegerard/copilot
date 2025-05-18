@@ -1,8 +1,7 @@
 import express from "express";
 import { fetchFromOllama } from "../services/ollamaService.js";
 import { searchGraph } from "../services/neo4jService.js";
-import { extractTechnicalKeywords, generateKeywordCombinations } from "../utils/keywordsUtils.js";
-import { formatCodeResponse, detectCodeLanguage, checkIfContainsCode } from "../utils/responseUtils.js";
+import { classifyText } from "../utils/keywordsUtils.js";
 import logger from "../utils/logger.js";
 
 const router = express.Router();
@@ -13,49 +12,33 @@ router.post("/", async (req, res) => {
     logger.info("User Message received", { userMessage });
 
     // Extract keywords from the user message
-    const keywords = extractTechnicalKeywords(userMessage);
-    logger.info("Extracted Keywords", { keywords });
+    const keywords = classifyText(userMessage);
+    logger.info("Nature of user text", { type: keywords.type});
+    logger.info("Value Keywords", { value: keywords.value });
 
-    // Generate keyword combinations
-    const keywordCombinations = generateKeywordCombinations(keywords);
-    logger.info("Generated Keyword Combinations", { keywordCombinations });
-
-    // Query the database using the keyword combinations
-    const dbResults = [];
-    for (const combination of keywordCombinations) {
-      logger.info("Executing Neo4j query for combination", { combination });
-      const result = await searchGraph([combination], "intent");
-      logger.info("Neo4j query result", { combination, result });
-      if (result.length > 0) {
-        dbResults.push(...result);
-      }
-    }
-    // Debug: Log the final database results
-    console.log("Final Database Results:", JSON.stringify(dbResults, null, 2));
-    logger.info("Database Results fetched", { dbResults });
+    // Query the database
+    const dbResults = await searchGraph(keywords.type, keywords.value);
 
     // Construct the prompt using the database results
     const dbContext = dbResults.map((result) => result.snippet).join("\n");
-    const prompt = `Based on this database content:\n${dbContext}\nAnswer the user: ${userMessage}`;
-    logger.info("Constructed Prompt", { prompt });
+    let prompt;
+    if (dbContext) {
+      prompt = dbContext;
+      var searchDatabase = true;
+    } else {
+      prompt = userMessage;
+      var searchDatabase = false;
+    }
 
     // Fetch response from Ollama
-    const ollamaResponse = await fetchFromOllama(prompt);
-    logger.info("Response from Ollama", { ollamaResponse });
+    const ollamaResponse = await fetchFromOllama(searchDatabase, prompt);
 
-    // Format the response before sending
-    const formattedResponse = formatCodeResponse(ollamaResponse, dbResults);
-    
-    res.json({ 
-      response: formattedResponse,
-      metadata: {
-        containsCode: checkIfContainsCode(ollamaResponse),
-        language: detectCodeLanguage(dbResults)
-      }
-    });
-  } catch (err) {
-    logger.error("Error occurred", { error: err.message });
-    res.status(500).json({ error: "Something went wrong" });
+    // Format the Ollama response and send it back
+    res.json({ response: ollamaResponse });
+
+  } catch (error) {
+    logger.error("Error in chat route", { error });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

@@ -38,6 +38,10 @@ function removeCommonWords(text) {
     .join(' ');
 }
 
+function removeAccents(str) {
+  return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 // Directory translation logic
 const directoryPairs = [
   ["DISBURSEMENT", "DÉCAISSEMENT"],
@@ -52,7 +56,12 @@ const directoryPairs = [
 ];
 
 const translated_directories = Object.fromEntries(directoryPairs);
-const frenchToEnglish = Object.fromEntries(directoryPairs.map(([en, fr]) => [fr.toUpperCase(), en]));
+const frenchToEnglish = Object.fromEntries(
+  directoryPairs.flatMap(([en, fr]) => [
+    [fr.toUpperCase(), en],
+    [removeAccents(fr.toUpperCase()), en]
+  ])
+);
 
 export function translateDirectories(inputText) {
   let output = inputText;
@@ -74,11 +83,11 @@ const directories = directoryPairs.map(([en]) => en.toLowerCase().replace(/_/g, 
 const sortedDirs = directories.slice().sort((a, b) => b.length - a.length);
 
 const fileSuffixes = new Set([
-  "pre posting",
   "test",
   "code",
   "schedule",
   "fees test",
+  "pre posting",
   "post posting",
   "schedule code",
   "derived parameters"
@@ -105,6 +114,22 @@ export function classifyText(originaltext) {
     }
   }
 
-  // 3. Tag
-  return { type: "Tag", value: text };
+  // 3. Tag → return all word combinations
+  const words = text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const combinations = [];
+  for (let i = 0; i < words.length; i++) {
+    let phrase = '';
+    for (let j = i; j < words.length; j++) {
+      phrase += (j === i ? '' : ' ') + words[j];
+      combinations.push(phrase);
+    }
+  }
+
+  return { type: "Tag", value: combinations };
+
 }
