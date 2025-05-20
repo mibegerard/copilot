@@ -2,6 +2,8 @@ import express from "express";
 import { fetchFromOllama } from "../services/ollamaService.js";
 import { searchGraph } from "../services/neo4jService.js";
 import { classifyText } from "../utils/keywordsUtils.js";
+import { hasCode, splitIntoSegments } from "../utils/codeUtils.js";
+import { detectLanguage } from "../utils/codeUtils.js";
 import logger from "../utils/logger.js";
 
 const router = express.Router();
@@ -13,8 +15,6 @@ router.post("/", async (req, res) => {
 
     // Extract keywords from the user message
     const keywords = classifyText(userMessage);
-    logger.info("Nature of user text", { type: keywords.type});
-    logger.info("Value Keywords", { value: keywords.value });
 
     // Query the database
     const dbResults = await searchGraph(keywords.type, keywords.value);
@@ -33,8 +33,27 @@ router.post("/", async (req, res) => {
     // Fetch response from Ollama
     const ollamaResponse = await fetchFromOllama(searchDatabase, prompt);
 
-    // Format the Ollama response and send it back
-    res.json({ response: ollamaResponse });
+    let language = "plaintext";
+    if (hasCode(ollamaResponse)) {
+      const segments = splitIntoSegments(ollamaResponse);
+      const firstCode = segments.find(seg => seg.type === "code");
+      if (firstCode) {
+        language = detectLanguage(firstCode.content) || "plaintext";
+      }
+    }
+
+    const containsCode = hasCode(ollamaResponse);
+    
+    logger.info("Language detected", { language: language ?? "undefined" });
+    logger.info("Contains code detected", { containsCode });
+    
+    res.json({ 
+      response: ollamaResponse,
+      metadata: {
+        language: language,
+        containsCode: containsCode
+      }
+    });
 
   } catch (error) {
     logger.error("Error in chat route", { error });
