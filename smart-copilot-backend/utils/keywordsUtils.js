@@ -55,7 +55,6 @@ const directoryPairs = [
   ["INTEREST PAYMENT SCHEDULE", "CALENDRIER DE PAIEMENT DES INTÉRÊTS"]
 ];
 
-const translated_directories = Object.fromEntries(directoryPairs);
 const frenchToEnglish = Object.fromEntries(
   directoryPairs.flatMap(([en, fr]) => [
     [fr.toUpperCase(), en],
