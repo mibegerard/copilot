@@ -27,7 +27,10 @@
   has_component: "https://raw.githubusercontent.com/mibegerard/copilot/refs/heads/main/data/has_component.csv",
   part_of: "https://raw.githubusercontent.com/mibegerard/copilot/refs/heads/main/data/part_of.csv",
   uses: "https://raw.githubusercontent.com/mibegerard/copilot/refs/heads/main/data/uses.csv",
-  has_version: "https://raw.githubusercontent.com/mibegerard/copilot/refs/heads/main/data/has_version.csv"
+  has_version: "https://raw.githubusercontent.com/mibegerard/copilot/refs/heads/main/data/has_version.csv",
+  triggers_during: "https://raw.githubusercontent.com/mibegerard/copilot/refs/heads/main/data/triggers_during.csv",
+  secured_by: "https://raw.githubusercontent.com/mibegerard/copilot/refs/heads/main/data/secured_by.csv",
+  validates: "https://raw.githubusercontent.com/mibegerard/copilot/refs/heads/main/data/validates.csv"
 };
 
 // ----------------------
@@ -160,6 +163,22 @@ LOAD CSV WITH HEADERS FROM $part_of AS row
 MERGE (h:Hook {hook_id: row.`hook_id:START_ID(Hook)`})
 MERGE (sc:Contract {contract_id: row.`contract_id:END_ID(Contract)`})
 MERGE (h)-[:PART_OF]->(sc);
+
+// 4.4 Additional Relationships (New)
+LOAD CSV WITH HEADERS FROM $triggers_during AS row
+MATCH (h:Hook {hook_id: row.START_ID(Hook)})
+MATCH (b:Batch {batch_id: row.END_ID(Batch)})
+MERGE (h)-[:TRIGGERS_DURING]->(b);
+
+LOAD CSV WITH HEADERS FROM $secured_by AS row
+MATCH (bal:Balance {balance_id: row.START_ID(Balance)})
+MATCH (v:Vault {vault_id: row.END_ID(Vault)})
+MERGE (bal)-[:SECURED_BY]->(v);
+
+LOAD CSV WITH HEADERS FROM $validates AS row
+MATCH (h:Hook {hook_id: row.START_ID(Hook)})
+MATCH (b:Batch {batch_id: row.END_ID(Batch)})
+MERGE (h)-[:VALIDATES]->(b);
 
 // --------------------------
 // 5. Transaction Processing
