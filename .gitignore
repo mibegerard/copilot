@@ -41,3 +41,7 @@ assets/
 assets.csv
 .env
 data/
+smart-copilot-backend/utils/rel_dir.py
+.gitignore
+smart-copilot-backend/utils/rel_tag.py
+smart-copilot-backend/utils/duplicate_tags.py
