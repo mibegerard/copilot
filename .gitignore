@@ -34,12 +34,11 @@ coverage/
 .DS_Store
 
 # Miscellaneous
-*.lock
-
 # Assets
 assets/
 assets.csv
 .env
+data
 data/
 smart-copilot-backend/utils/rel_dir.py
 .gitignore
