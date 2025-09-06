@@ -2,33 +2,7 @@
 
 > Système d’import et de modélisation de données Fintech pour Neo4j
 
----
 
-## 📁 Structure du projet
-
-```
-sc-copilot/
-│
-├── data/
-│   ├── nodes_directories.csv
-│   ├── nodes_files.csv
-│   ├── nodes_tags.csv
-│   ├── rels_file_directory.csv
-│   ├── rels_file_tags.csv
-│   ├── import.cypher
-│   └── ...
-│
-├── smart-copilot-backend/
-│   └── utils/
-│       ├── rel_dir.py
-│       ├── rel_tag.py
-│       ├── duplicate_tags.py
-│       └── ...
-│
-└── README.md
-```
-
----
 
 ## 🚀 Fonctionnalités
 
