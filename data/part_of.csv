@@ -1,3 +1,0 @@
-hook_id:START_ID(Hook),contract_id:END_ID(Contract),relationship_type
-hook1,sc1,PART_OF
-hook2,sc2,PART_OF

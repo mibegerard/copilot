@@ -1,2 +1,0 @@
-customer_id:ID(Customer),name, metadata
-cust1,John Doe,"{\"risk_profile\": \"low\"}"

@@ -1,3 +1,0 @@
-product_id:START_ID(Product),contract_id:END_ID(Contract),:TYPE
-prod1,sc1,USES
-prod2,sc2,USES

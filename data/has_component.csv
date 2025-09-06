@@ -1,3 +1,0 @@
-vault_id:START_ID(Vault),component_id:END_ID(Component),relationship_type
-vault1,comp1,HAS_COMPONENT
-vault1,comp2,HAS_COMPONENT
