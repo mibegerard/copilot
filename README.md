@@ -75,14 +75,3 @@ Merci de proposer vos améliorations via des pull requests ou issues.
 
 ---
 
-## 📄 Licence
-
-MIT
-
----
-
-## 👤 Auteur
-
-**mibegerard**
-
----
