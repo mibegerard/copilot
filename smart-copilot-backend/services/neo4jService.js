@@ -9,11 +9,6 @@ const driver = neo4j.driver(
   neo4j.auth.basic(process.env.NEO4J_USERNAME, process.env.NEO4J_PASSWORD)
 );
 
-logger.info("Neo4j Credentials:");
-logger.info("URI:", process.env.NEO4J_URI);
-logger.info("Username:", process.env.NEO4J_USERNAME);
-logger.info("Password:", process.env.NEO4J_PASSWORD ? "******" : "Not Set");
-
 export const checkDatabaseConnection = async () => {
   const session = driver.session();
 
@@ -23,22 +18,17 @@ export const checkDatabaseConnection = async () => {
       RETURN label
     `);
 
-    logger.info("✅ Connected to Neo4j database successfully.");
-    logger.info("Available labels in the database:", result.records.map(record => record.get('label')));
-
     const nodeCountResult = await session.run(`
       MATCH (n)
       RETURN COUNT(n) AS nodeCount
     `);
     const nodeCount = nodeCountResult.records[0].get('nodeCount');
-    logger.info("Total number of nodes in the database:", nodeCount);
 
     const relationshipCountResult = await session.run(`
       MATCH ()-[r]->()
       RETURN COUNT(r) AS relationshipCount
     `);
     const relationshipCount = relationshipCountResult.records[0].get('relationshipCount');
-    logger.info("Total number of relationships in the database:", relationshipCount);
 
     return {
       success: true,
@@ -47,7 +37,6 @@ export const checkDatabaseConnection = async () => {
       relationshipCount,
     };
   } catch (err) {
-    logger.error("❌ Failed to connect to Neo4j database:", err.message);
     return { success: false, error: err.message };
   } finally {
     await session.close();
@@ -62,7 +51,6 @@ export const searchVector = async (embedding, topK = 5) => {
   const sessionTag = driver.session({ defaultAccessMode: neo4j.session.READ });
 
   try {
-    logger.info("🔍 Starting vector search...");
     const fileQuery = `
       CALL db.index.vector.queryNodes('file_vector_index', $topK, $embedding)
       YIELD node, score
@@ -79,31 +67,22 @@ export const searchVector = async (embedding, topK = 5) => {
       ORDER BY score DESC
     `;
 
-    logger.info("🧠 File vector query:", fileQuery.trim());
-    logger.info("🧠 Tag vector query:", tagQuery.trim());
-    logger.info("📦 Params:", { embedding: neo4jEmbedding.slice(0, 5), topK });
-
     const [fileResult, tagResult] = await Promise.all([
       sessionFile.run(fileQuery, { embedding: neo4jEmbedding, topK: neo4jTopK }),
       sessionTag.run(tagQuery, { embedding: neo4jEmbedding, topK: neo4jTopK })
     ]);
-
-    logger.info(`📄 File vector search returned ${fileResult.records.length} results.`);
-    logger.info(`🏷️ Tag vector search returned ${tagResult.records.length} results.`);
 
     const fileMapped = fileResult.records.map(r => ({
       snippet: r.get('content'),
       score: r.get('score'),
       source: `File: ${r.get('source')}`
     }));
-    logger.info("📄 File mapped results:", fileMapped);
 
     const tagMapped = tagResult.records.map(r => ({
       snippet: r.get('content'),
       score: r.get('score'),
       source: `Tag: ${r.get('source')}`
     }));
-    logger.info("🏷️ Tag mapped results:", tagMapped);
 
     const combined = [
       ...fileMapped,
@@ -132,7 +111,6 @@ export const searchVector = async (embedding, topK = 5) => {
 
 export const searchGraph = async (type, value) => {
   const session = driver.session();
-  logger.info("🔍 Searching in Neo4j database...");
 
   try {
     let query = "";
@@ -147,16 +125,12 @@ export const searchGraph = async (type, value) => {
         RETURN collect({content: f.content, path: f.file_path}) AS files
     `;
     
-    logger.info(`📁 Searching for all files in directory: ${dirPrefix}`);
-    logger.info("🧠 Query:", query.trim());
-    logger.info("📦 Params:", { dirPrefix });
 
     try {
         result = await session.run(query, { dirPrefix });
         const records = result.records;
         
         if (records.length === 0 || !records[0].get('files')?.length) {
-            logger.info(`📂 No files found in directory: ${dirPrefix}`);
             return {
                 status: 'success',
                 directory: dirPrefix,
@@ -174,22 +148,16 @@ export const searchGraph = async (type, value) => {
             filename: file.path.split('/').pop() // Extract filename
         }));
 
-        logger.info(`📂 Found ${directoryContents.length} files in directory`);
         directoryContents.forEach((file, index) => {
           logger.info(`\n📄 File ${index + 1}: ${file.filename}`);
           logger.info(`📁 Path: ${file.path}`);
           logger.info(`📏 Content length: ${file.content.length} characters`);
-          
-            // Log all content for inspection
-            logger.info('🔍 Full content:');
-            logger.info(file.content);
-      });
+        });
         return {
             contents: directoryContents
         };
 
     } catch (error) {
-        logger.error('⚠️ Directory search failed:', error);
         return {
             message: 'Failed to retrieve directory contents',
             error: error.message
@@ -217,13 +185,7 @@ export const searchGraph = async (type, value) => {
         LIMIT 1
       `;
 
-      logger.info(`📄 Searching file content for: ${value}`);
-      logger.info(`📂 Normalized file path: ${filePath}`);
-      logger.info(`🧠 Query: ${query.trim()}`);
-      logger.info(`📦 Params: ${JSON.stringify({ filePath })}`);
-
       result = await session.run(query, { filePath });
-      logger.info(`📄 File search returned ${result}`);
       if (result.records.length > 0) {
         logger.info("📊 Raw records:", JSON.stringify(result.records, null, 2));
         logger.info("📊 Record fields:", Object.keys(result.records[0]?.toObject?.() || {}));
@@ -234,9 +196,6 @@ export const searchGraph = async (type, value) => {
           snippet: record.get("result"),
           source: `File: ${record.get("path")}`
         }));
-        logger.info(`📄 Returning ${allResults.length} file(s) for: ${filePath}`);
-        logger.info("📄 File content found:", allResults);
-        logger.info(`📄 Returning data file(s) for: ${allResults}`);
         
         return allResults;
       } else {
@@ -244,7 +203,6 @@ export const searchGraph = async (type, value) => {
       }
 
     } else if (type === "Tag") {
-      // Improved tag search with better parameter handling
       const tagNames = Array.isArray(value) ? value : [value];
       query = `
         WITH $tagNames AS keywords
@@ -256,32 +214,22 @@ export const searchGraph = async (type, value) => {
         RETURN t.content AS result, t.name AS name
         LIMIT 3
       `;
-      logger.info(`🏷️ Searching for tags:`, tagNames);
-      logger.info("🧠 Query:", query.trim());
-      logger.info("📦 Params:", { tagNames });
 
       result = await session.run(query, { tagNames });
-      logger.info(`🏷️ Tag search returned ${result}`);
       if (result.records.length > 0) {
-        logger.info("📊 Raw records:", JSON.stringify(result.records, null, 2));
-        logger.info("📊 Record fields:", Object.keys(result.records[0]?.toObject?.() || {}));
-        logger.info("📊 Record toObject:", result.records[0]?.toObject?.());
         const allResults = result.records.map(record => ({
           snippet: record.get("result"),
           source: `Tag: ${record.get("name")}`
         }));
-        logger.info(`🔍 Tag content found for tags:`, tagNames, allResults);
         return allResults;
       } else {
         logger.info(`🏷️ No matching tags found for:`, tagNames);
       }
     }
 
-    logger.info(`❌ Unknown search type: ${type}`);
-
   } catch (err) {
-    logger.error("❌ Error in searchGraph:", err.message);
-    logger.error("Stack trace:", err.stack);
+    console.error("❌ Error in searchGraph:", err.message);
+    console.error("Stack trace:", err.stack);
   } finally {
     await session.close();
   }
@@ -395,9 +343,6 @@ export async function getSubventionModelGraph() {
       };
     });
 
-    logger.info(`✅ Successfully retrieved subvention model graph with ${paths.length} paths.`);
-    logger.debug("Subvention model graph paths:", JSON.stringify(paths, null, 2));
-    logger.info("Subvention model graph structure:", paths);
     return paths;
   } catch (error) {
     console.error("Error retrieving subvention model graph:", error);

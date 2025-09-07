@@ -4,7 +4,7 @@ import logger from '../utils/logger.js';
 import axios from 'axios';
 
 dotenv.config();
-const OLLAMA_API_URL = process.env.OLLAMA_API_URL;
+const OLLAMA_API = process.env.OLLAMA_API;
 const OLLAMA_EMBEDDING_MODEL = process.env.OLLAMA_EMBEDDING_MODEL;
 
 /**
@@ -16,7 +16,7 @@ export async function generateEmbedding(text) {
     logger.info('Appel à Ollama pour générer un embedding.');
     try {
         const response = await axios.post(
-            `${OLLAMA_API_URL}/api/embeddings`,
+            `${OLLAMA_API}/api/embeddings`,
             {
             model: OLLAMA_EMBEDDING_MODEL || 'nomic-embed-text',
             prompt: text,

@@ -24,8 +24,11 @@ function Chat({ chat, onUpdateMessages }) {
     setInput("");
     setIsLoading(true);
 
+      // Log the API URL
+  console.log("API URL being used:", process.env.REACT_APP_API_URL);
+
     try {
-      const res = await axios.post("http://localhost:5050/api/chat", {
+      const res = await axios.post(`${process.env.REACT_APP_API_URL}/api/chat`, {
         message: input,
       });
 
