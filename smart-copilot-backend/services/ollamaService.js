@@ -12,17 +12,27 @@ dotenv.config();
 export const fetchFromOllama = async (input) => {
   try {
     logger.info("🤖 Querying Ollama model with prompt");
-    const response = await axios.post(process.env.OLLAMA_API_FULL, {
-      model: process.env.OLLAMA_CODE_MODEL,
-      messages: [{ role: "user", content: input }],
-      stream: false,
-    });
+    const response = await axios.post(
+      process.env.OLLAMA_API_FULL,
+      {
+        model: process.env.OLLAMA_CODE_MODEL,
+        messages: [{ role: "user", content: input }],
+        stream: false,
+      },
+      {
+        timeout: 300000, // 5 minutes in ms
+      }
+    );
 
     const result = response.data?.message?.content;
     logger.info("✅ Received response from Ollama.");
     return result;
 
   } catch (error) {
+    if (error.code === "ECONNABORTED") {
+      logger.error("⏳ Ollama request timed out after 5 minutes.");
+      return "Sorry, the request took too long and timed out.";
+    }
     logger.error("❌ Error while querying Ollama:", error.message);
     return "Sorry, something went wrong while processing your request.";
   }
@@ -78,12 +88,18 @@ Now classify this question:
 "${text}"
 `;
 
-    const response = await axios.post(`${process.env.OLLAMA_API}/api/chat`, {
-      model: process.env.OLLAMA_CODE_MODEL,
-      messages: [{ role: "user", content: prompt }],
-      stream: false,
-      temperature: 0,
-    });
+    const response = await axios.post(
+      `${process.env.OLLAMA_API}/api/chat`,
+      {
+        model: process.env.OLLAMA_CODE_MODEL,
+        messages: [{ role: "user", content: prompt }],
+        stream: false,
+        temperature: 0,
+      },
+      {
+        timeout: 300000, // 5 minutes
+      }
+    );
 
     let answer = response.data?.message?.content;
     logger.info("Raw isCommonQuestion response", { answer });
@@ -106,6 +122,10 @@ Now classify this question:
     return answer;
 
   } catch (error) {
+    if (error.code === "ECONNABORTED") {
+      logger.error("⏳ Ollama request timed out after 5 minutes.");
+      return "No";
+    }
     logger.error("❌ Error while checking if common question:", error.message);
     return "No";
   }
