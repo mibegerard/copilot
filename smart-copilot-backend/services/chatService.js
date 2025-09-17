@@ -8,6 +8,7 @@ import logger from "../utils/logger.js";
 export const processMessage = async (message) => {
   logger.info("🚀 Starting processMessage", { message });
 
+  /*
   // ── Step 0: Check if it's a common question ──
   logger.info("Step 0: Checking if message is a common question...");
   const commonQuestionAnswer = await isCommonQuestion(message);
@@ -24,6 +25,7 @@ export const processMessage = async (message) => {
     const graphContext = await getSubventionModelGraph();
     logger.info(`Step 1: Graph context loaded (${graphContext.length} connections)`);
 
+    // Build model structure from graph context
     const modelStructure = graphContext
       .map(
         (c) =>
@@ -103,10 +105,11 @@ export const processMessage = async (message) => {
     prompt += `to perform the task: "${message}"\nAnswer only in text.`;
     logger.info("Step 4: Prompt constructed", { promptLength: prompt.length });
   }
+  */
 
   // ── Step 5: Fetch response from Ollama ──────────────
   logger.info("Step 5: Fetching response from Ollama...");
-  let ollamaResponse = await fetchFromOllama(prompt);
+  let ollamaResponse = await fetchFromOllama(message);
   logger.info("Step 5: Raw response received from Ollama", { ollamaResponse });
 
   // Ensure Ollama returns string

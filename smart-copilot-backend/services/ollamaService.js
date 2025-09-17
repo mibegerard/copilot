@@ -23,7 +23,7 @@ export const fetchFromOllama = async (input) => {
         timeout: 300000, // 5 minutes in ms
       }
     );
-
+    console.log("ollama api full:", process.env.OLLAMA_API_FULL);
     const result = response.data?.message?.content;
     logger.info("✅ Received response from Ollama.");
     return result;
@@ -33,6 +33,9 @@ export const fetchFromOllama = async (input) => {
       logger.error("⏳ Ollama request timed out after 5 minutes.");
       return "Sorry, the request took too long and timed out.";
     }
+    console.log("ollama api full:", process.env.OLLAMA_API_FULL);
+    logger.error("⚠️ Ollama response error", { error: error.response?.data || error.message });
+    logger.info("ollama api full:", process.env.OLLAMA_API_FULL);
     logger.error("❌ Error while querying Ollama:", error.message);
     return "Sorry, something went wrong while processing your request.";
   }
@@ -100,7 +103,7 @@ Now classify this question:
         timeout: 300000, // 5 minutes
       }
     );
-
+    console.log("ollama api:", process.env.OLLAMA_API);
     let answer = response.data?.message?.content;
     logger.info("Raw isCommonQuestion response", { answer });
 
